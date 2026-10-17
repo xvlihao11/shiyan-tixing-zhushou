@@ -1,0 +1,567 @@
+:root{--ui-ink:#16383d;--ui-green:#166b66;--ui-line:#dce9e5;--ui-soft:#edf5f1;--ui-card-opacity:.37;--ui-glass-highlight:.22;--ui-glass-highlight-soft:.035;--ui-glass-blue:.10;--ui-glass-blur:5px;background:linear-gradient(175deg,#f4f8f5,#edf4f2 60%,#f7faf8) fixed;color:var(--ui-ink)}
+html,body{min-height:100%;overflow-x:hidden}body{background:transparent}:is(#root,.section-outgoing){position:relative;z-index:1;min-height:65vh;transform:translate3d(0,0,0);backface-visibility:hidden;will-change:auto}.trial-wallpaper{position:fixed;z-index:0;inset:0;pointer-events:none;overflow:hidden;background:#f4f7f5;transition:opacity .18s ease}.trial-wallpaper img,.trial-wallpaper video{width:100%;height:100%;object-fit:cover;display:block}
+
+
+
+.card,.task-dashboard,.export-panel,.st-comparison,.md-catalog-card,.group-card{border:1px solid rgba(255,255,255,.78);background-color:rgba(255,255,255,var(--ui-card-opacity));background-image:linear-gradient(135deg,#ffffff2e 0%,transparent 38%,#ffffff16 100%);-webkit-backdrop-filter:blur(6px) saturate(1.12);backdrop-filter:blur(6px) saturate(1.12);box-shadow:inset 0 1px 0 #ffffffd9,inset 1px 0 0 #ffffff80,inset -1px -1px 0 #77999926,0 12px 28px #123b3e24,0 2px 6px #123b3e19}.hero{background:linear-gradient(140deg,#153e45,#126c6b 66%,#3c9d81);box-shadow:0 13px 28px #134c4930}.hero h1{letter-spacing:.015em}.hero .eyebrow{letter-spacing:.13em}.card:focus-within{border-color:#9acac3}.date-card,.sample-card,.run-card,.type-card,.template-card{transition:background .18s,border-color .18s,box-shadow .18s,transform .18s}.date-card:active,.sample-card:active,.run-card:active,.type-card:active{transform:scale(.987);background:#f1f8f5}.start-project{background:#147555;box-shadow:0 4px 10px #1b8a5430}.step-actions{justify-content:flex-end}.run-menu,.photo-options>div{box-shadow:0 10px 28px #20433b26}.nav{background:#f7faf9;border:1px solid #e2ebe8;box-shadow:15px 0 50px #092c3150}.nav .drawer-link.active{background:#e1f2ed}.drawer-brand{min-height:154px;background:linear-gradient(130deg,#112f37,#166d69 72%,#297d69)}.drawer-brand-name{font-size:20px;margin-top:14px}.drawer-links{flex:none;padding:12px 13px 5px}.drawer-section{margin:2px 0 3px}.drawer-section:not(:first-child){margin-top:10px}.nav .drawer-link{min-height:43px;margin:1px 0;padding:8px 12px;font-size:13px;border-radius:11px}.nav .drawer-link svg{width:18px;height:18px}.nav .drawer-link.active:before{top:10px;bottom:10px}.drawer-foot{margin-top:auto;padding-top:12px}.drawer-workbench{margin:7px 13px;padding:12px 10px;border-radius:15px;background:#eaf3ef;border:1px solid #dcebe3}.drawer-work-head{display:flex;justify-content:space-between;gap:5px;align-items:center;color:#204b48;font-size:14px}.drawer-work-head span{background:#d5eae3;color:#257467;padding:3px 7px;border-radius:100px;font-size:10px;white-space:nowrap}.drawer-work-label{margin:9px 2px 3px;font-size:10px;font-weight:700;letter-spacing:.08em;color:#61847b}.drawer-work-empty{font-size:11px;color:#799087;margin:5px 3px}.nav .drawer-task{width:100%;min-height:40px;padding:6px 8px;display:flex;align-items:center;justify-content:space-between;gap:6px;margin:2px 0;border:1px solid #e4efea;background:#ffffffdb;color:#2b4f4a;border-radius:9px;text-align:left;box-shadow:none;font-size:11px}.nav .drawer-task.is-due{border-left:3px solid #d88148}.drawer-task span{min-width:0}.drawer-task b,.drawer-task small{display:block;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.drawer-task small{color:#849a91;font-size:10px;font-weight:400}.drawer-task i{flex:none;color:#4d8174;font-style:normal;font-size:10px}.drawer-appearance{margin:8px 13px 5px;background:#fff;border:1px solid #e0ebe6;border-radius:13px;padding:7px 11px}.drawer-appearance summary{margin:0;color:#34655d;font-size:12px}.drawer-appearance p,.drawer-appearance small{color:#66847b;font-size:11px;margin:6px 0}.drawer-wall-actions{display:flex;gap:6px}.nav .drawer-wall-actions button{margin:0;flex:1;padding:7px 4px;min-height:36px;font-size:11px;background:#e6f2ed;color:#205a4c}.drawer-appearance label{font-size:11px;margin-top:8px}.drawer-appearance input[type=range]{height:30px;padding:0;margin:3px 0;accent-color:#1b7e72}.drawer-appearance .step-actions{margin-top:1px}.drawer-appearance .step-actions button{min-height:30px;padding:5px 8px;font-size:10px}
+.trial-import-card{position:relative;z-index:1;background:#e5f3ee;border:1px solid #bbded3;border-radius:17px;margin:0 0 12px;padding:13px 15px;color:#1b564c}.trial-import-card strong{display:block;font-size:14px}.trial-import-card p{font-size:11px;margin:4px 0;color:#55766c}.trial-badge{float:right;font-size:10px;color:#218575;background:#fff;border-radius:6px;padding:4px 6px}.trial-import-card .step-actions{margin-top:5px}.trial-import-card button{font-size:11px;padding:6px 9px;min-height:32px}
+.drawer-backdrop{z-index:39}.nav.open{z-index:40}.bottom-nav{background:#ffffffef;backdrop-filter:blur(13px);-webkit-backdrop-filter:blur(13px);box-shadow:0 -8px 20px #21554815}.bottom-nav button.active{background:#e2f2eb;color:#116b59}
+@media(max-width:360px){.drawer-workbench{padding:9px 7px}.nav .drawer-link{min-height:41px}}
+@media(prefers-reduced-motion:reduce){.card,.step-card,.date-card,.sample-card,.run-card,.type-card,.template-card,.trial-wallpaper{transition:none!important}}
+
+/* Keep secondary details legible over both pale and dark wallpaper colors. */
+.card .muted,.card .date-meta,.card small,.task-dashboard small,.export-panel small,.st-comparison small,.group-card small,.md-catalog-card small,
+.card .export-heading small,.drawer-task small,.drawer-task i,.drawer-work-label,.drawer-work-empty,.drawer-appearance p,.drawer-appearance small,.trial-import-card p{
+  color:#28514e;font-weight:600;text-shadow:0 1px 0 rgba(255,255,255,.75)
+}
+:is(#root,.section-outgoing)>.muted,:is(#root,.section-outgoing)>p.muted,.page-heading .muted,.md-catalog-caption,.md-catalog-caption small{
+  color:#173c3d;font-weight:650;text-shadow:0 1px 3px #ffffff,0 0 8px #ffffff
+}
+.drawer-appearance label,.drawer-appearance summary{color:#28514e;font-weight:700}
+
+/* Fade the bottom controls into the wallpaper while keeping the labels readable. */
+.bottom-nav{
+  background:linear-gradient(to bottom,rgba(245,250,248,.03),rgba(245,250,248,.29) 38%,rgba(245,250,248,.62));
+  border-top:1px solid rgba(255,255,255,.28);
+  box-shadow:0 -10px 22px rgba(18,52,48,.07);
+  -webkit-backdrop-filter:blur(9px) saturate(1.15);
+  backdrop-filter:blur(9px) saturate(1.15)
+}
+.bottom-nav button{color:#194946;font-weight:650;text-shadow:0 1px 2px rgba(255,255,255,.88)}
+.bottom-nav button.active{background:rgba(226,246,239,.73);box-shadow:inset 0 1px 0 rgba(255,255,255,.68);color:#075b4c}
+.wallpaper-frame-controls{margin:8px 0;padding:8px;border-radius:10px;background:rgba(228,242,235,.65)}
+.drawer-appearance .wallpaper-frame-controls select{height:34px;padding:5px 7px;margin:3px 0 6px;font-size:11px}
+.drawer-appearance .wallpaper-frame-controls label{display:block}
+.nav .wallpaper-frame-controls button{min-height:29px;padding:5px 9px;margin:2px 0 0;font-size:11px}
+
+/* Clear glass: preserve the moving image, softly blur only what is behind a card. */
+.card,.task-dashboard,.export-panel,.st-comparison,.md-catalog-card,.group-card,.wallpaper-settings{
+  background-color:rgba(240,251,255,var(--ui-card-opacity));
+  background-image:linear-gradient(145deg,rgba(255,255,255,var(--ui-glass-highlight)),rgba(255,255,255,var(--ui-glass-highlight-soft)) 52%,rgba(182,239,255,var(--ui-glass-blue)));
+  border:1px solid rgba(255,255,255,.82);
+  -webkit-backdrop-filter:blur(var(--ui-glass-blur)) saturate(1.12);
+  backdrop-filter:blur(var(--ui-glass-blur)) saturate(1.12);
+  box-shadow:inset 0 1px 0 #ffffffd6,inset 1px 0 0 #ffffff7d,inset -1px -1px 0 #a6d5e456,0 9px 22px #092c3b30,0 2px 6px #1239441e
+}
+.hero{
+  padding:20px 21px 17px;
+  background:linear-gradient(135deg,rgba(3,51,58,.68),rgba(5,87,87,.60) 57%,rgba(24,111,104,.54));
+  border:1px solid rgba(211,255,251,.72);
+  -webkit-backdrop-filter:blur(7px) saturate(1.15);
+  backdrop-filter:blur(7px) saturate(1.15);
+  box-shadow:inset 0 1px 0 #ffffff8c,inset 1px 0 0 #ffffff36,0 12px 24px #072a3540
+}
+.hero h1{color:#fff;text-shadow:0 2px 7px #092d38dd}
+.hero .eyebrow{color:#d1faff;text-shadow:0 1px 4px #092d38d6}
+.hero p{color:#e9fcff;margin:5px 0 0;font-weight:650;text-shadow:0 1px 5px #092d38e6}
+.drawer-toggle{
+  background:linear-gradient(145deg,#ffffffc9,#e8f8f2ae);
+  border:1px solid #ffffffed;
+  box-shadow:inset 0 1px 0 #fff,0 6px 19px #0c344a46;
+  -webkit-backdrop-filter:blur(13px) saturate(1.35);
+  backdrop-filter:blur(13px) saturate(1.35)
+}
+
+/* Short grade cards stay compact even beside a long grade name. */
+.yield-cards{align-items:start}
+.yield-grade-card{min-height:72px;align-self:start}
+.yield-grade-open,.yield-grade-open:active{
+  display:flex;align-items:center;width:100%;min-height:72px;
+  padding:10px 45px 10px 13px;background:transparent;color:#123e4b;
+  font-size:14px;line-height:1.3;box-shadow:none;border-radius:inherit
+}
+.yield-grade-name{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+.yield-grade-menu{top:18px}
+.group-card{scroll-margin-top:calc(68px + env(safe-area-inset-top))}
+
+/* Blue secondary copy on glass; luminous blue with a dark halo on wallpaper. */
+:is(#root,.section-outgoing) .card .muted,:is(#root,.section-outgoing) .card small,:is(#root,.section-outgoing) .date-meta,:is(#root,.section-outgoing) .task-dashboard small,
+:is(#root,.section-outgoing) .st-comparison small,:is(#root,.section-outgoing) .st-condition,:is(#root,.section-outgoing) .export-heading small,
+:is(#root,.section-outgoing) .yield-record small,:is(#root,.section-outgoing) .yield-mode-caption,:is(#root,.section-outgoing) .md-catalog-caption small,
+.drawer-appearance small,.drawer-appearance p,.drawer-task small,.drawer-task i,
+.drawer-work-label,.drawer-work-empty,.trial-import-card p{
+  color:#086f9e;font-weight:700;text-shadow:0 1px 0 #ffffffc9
+}
+input::placeholder,textarea::placeholder{color:#3683a3;opacity:1}
+.has-wallpaper :is(#root,.section-outgoing) .yield-page>h1,.has-wallpaper :is(#root,.section-outgoing) .page-heading h1,
+.has-wallpaper :is(#root,.section-outgoing) .doc-hero h1,.has-wallpaper :is(#root,.section-outgoing)>h1{
+  color:#f4fcff;text-shadow:0 2px 5px #052c40ef,0 0 13px #052c40a6
+}
+.has-wallpaper :is(#root,.section-outgoing) .yield-page>p.muted,.has-wallpaper :is(#root,.section-outgoing)>.muted,
+.has-wallpaper :is(#root,.section-outgoing)>p.muted,.has-wallpaper :is(#root,.section-outgoing) .page-heading>.muted,
+.has-wallpaper :is(#root,.section-outgoing) .doc-hero p,.has-wallpaper :is(#root,.section-outgoing) .page-heading>.eyebrow,
+.has-wallpaper .section-indicator strong,.has-wallpaper .section-indicator small{
+  color:#b8edff;font-weight:750;text-shadow:0 2px 4px #031e2ff0,0 0 9px #042d41cf
+}
+.has-wallpaper .section-indicator strong{color:#f1fbff}
+.has-wallpaper :is(#root,.section-outgoing) .muted,.has-wallpaper :is(#root,.section-outgoing) small{
+  color:#b8edff;font-weight:700;text-shadow:0 2px 4px #031e2fe8
+}
+.has-wallpaper :is(#root,.section-outgoing) .card .muted,.has-wallpaper :is(#root,.section-outgoing) .card small,
+.has-wallpaper :is(#root,.section-outgoing) .task-dashboard small,.has-wallpaper :is(#root,.section-outgoing) .st-comparison small,
+.has-wallpaper :is(#root,.section-outgoing) .date-meta,.has-wallpaper :is(#root,.section-outgoing) .yield-record small{
+  color:#086f9e;text-shadow:0 1px 1px #ffffffed,0 0 6px #ffffffd9
+}
+.has-wallpaper :is(#root,.section-outgoing) .card strong,.has-wallpaper :is(#root,.section-outgoing) .card label,
+.has-wallpaper :is(#root,.section-outgoing) .card .yield-grade-open,.has-wallpaper :is(#root,.section-outgoing) .card h3{
+  text-shadow:0 1px 1px #ffffffed,0 0 6px #ffffffd9
+}
+.has-wallpaper :is(#root,.section-outgoing)>h2,.has-wallpaper :is(#root,.section-outgoing) .yield-page>h2{
+  color:#ecfbff;text-shadow:0 2px 5px #052c40f0,0 0 10px #052c40c9
+}
+:is(#root,.section-outgoing) .card,:is(#root,.section-outgoing) .task-dashboard,:is(#root,.section-outgoing) .st-comparison,:is(#root,.section-outgoing) .export-panel{
+  color:#075b7d
+}
+:is(#root,.section-outgoing) .card label,:is(#root,.section-outgoing) .card strong,:is(#root,.section-outgoing) .card summary,:is(#root,.section-outgoing) .card h3,
+:is(#root,.section-outgoing) .card .yield-grade-open,:is(#root,.section-outgoing) .task-dashboard strong,:is(#root,.section-outgoing) .st-comparison strong,
+:is(#root,.section-outgoing) .export-panel strong,:is(#root,.section-outgoing) .type-card strong,:is(#root,.section-outgoing) .template-header strong{
+  color:#075b7d;font-weight:750;text-shadow:0 1px 1px #fffffff2,0 0 6px #ffffffd9
+}
+:is(#root,.section-outgoing) .card button:not(.yield-grade-open):not(.template-header):not(.secondary){text-shadow:none}
+:is(#root,.section-outgoing) .card .pill,:is(#root,.section-outgoing) .card .red,:is(#root,.section-outgoing) .card .green,:is(#root,.section-outgoing) .card .orange{
+  text-shadow:var(--mode1-text-glow)
+}
+:is(#root,.section-outgoing) .card .pill strong{color:inherit;text-shadow:inherit}
+:is(#root,.section-outgoing) .card button:not(.yield-grade-open):not(.template-header):not(.secondary) strong{
+  color:inherit;text-shadow:none
+}
+
+/* Menus keep their touch target while only the three dots remain visible. */
+.more-btn,.date-more,.photo-options summary,.doc-delete{
+  background:transparent;border:0;box-shadow:none;color:#006f9d;
+  font-weight:800;text-shadow:0 1px 1px #fff,0 0 5px #ffffffd9
+}
+:is(#root,.section-outgoing) .card .more-btn,:is(#root,.section-outgoing) .card .date-more{
+  background:transparent;color:#006f9d;text-shadow:0 1px 1px #fff,0 0 5px #ffffffd9
+}
+.more-btn:active,.date-more:active,.photo-options summary:active,.doc-delete:active{
+  background:rgba(255,255,255,.12);filter:none
+}
+:is(#root,.section-outgoing) .card .more-btn:active,:is(#root,.section-outgoing) .card .date-more:active{
+  background:rgba(255,255,255,.12)
+}
+
+/* Use the same clear-glass language for the remaining panels. */
+.type-card,.doc-card,.doc-search,.doc-outline,.export-backup,
+.trial-import-card,.run-options-card,.photo-options>div{
+  background-color:rgba(244,252,255,var(--ui-card-opacity));
+  background-image:linear-gradient(145deg,rgba(255,255,255,var(--ui-glass-highlight)),rgba(255,255,255,var(--ui-glass-highlight-soft)) 55%,rgba(189,239,255,var(--ui-glass-blue)));
+  border:1px solid #ffffffc9;
+  -webkit-backdrop-filter:blur(var(--ui-glass-blur)) saturate(1.1);
+  backdrop-filter:blur(var(--ui-glass-blur)) saturate(1.1);
+  box-shadow:inset 0 1px 0 #ffffffcf,0 7px 19px #0b354027
+}
+.markdown-content:not(.md-catalog-view){
+  background:rgba(248,253,255,.65);border:1px solid #ffffffd9;
+  -webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px)
+}
+.type-picker-toggle,.template-header,.yield-grade-open,.doc-outline button{
+  background:transparent
+}
+.trial-import-card p,.doc-card small,.doc-card p,.doc-outline small{color:#08749d;font-weight:700}
+
+/* The drawer is a panel of glass sliding in from the right. */
+.drawer-toggle{left:auto;right:14px;background:linear-gradient(145deg,#ffffffa8,#e9fbff63)}
+.nav{
+  left:auto;right:0;border-radius:22px 0 0 22px;
+  background:linear-gradient(145deg,rgba(244,252,255,.55),rgba(224,246,250,.38));
+  border-left:1px solid #ffffffd9;border-top:0;
+  -webkit-backdrop-filter:blur(9px) saturate(1.16);
+  backdrop-filter:blur(9px) saturate(1.16);
+  box-shadow:-12px 0 36px #0a2d3852,inset 1px 0 0 #ffffffb8;
+  transform:translateX(105%)
+}
+.nav.open{transform:translateX(0)}
+.drawer-brand{
+  background:linear-gradient(140deg,rgba(4,51,58,.75),rgba(8,92,92,.64) 70%,rgba(24,111,104,.56));
+  -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px)
+}
+.drawer-workbench,.drawer-appearance{
+  background:linear-gradient(145deg,#ffffff9c,#e5f8fd6b);
+  border:1px solid #ffffffc9;
+  -webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);
+  box-shadow:inset 0 1px 0 #ffffffdf,0 5px 14px #0b35401c
+}
+.nav .drawer-task,.nav .drawer-link.active{
+  background:rgba(255,255,255,.42);border-color:#ffffffb8;
+  -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)
+}
+.drawer-section,.drawer-foot{color:#096d96;font-weight:750}
+
+.wallpaper-gallery{margin:10px 0 8px;padding-top:7px;border-top:1px solid #a9d6e480}
+.wallpaper-gallery>strong{display:block;font-size:12px;color:#075b7d;margin:0 0 6px}
+.wallpaper-empty{font-size:11px;line-height:1.4}
+.wallpaper-saved{position:relative;display:flex;align-items:center;gap:7px;min-height:55px;padding:5px 7px 5px 38px;margin:5px 0;border:1px solid #ffffffa6;border-radius:11px;background:#ffffff45;cursor:pointer}
+.wallpaper-saved.active{border-color:#46b2c5;box-shadow:inset 0 0 0 1px #a6ebf8}
+.wallpaper-saved.menu-open{z-index:5}
+.wallpaper-saved:focus-visible{outline:2px solid #0b8f9b;outline-offset:2px}
+.wallpaper-menu-wrap{position:absolute;top:5px;left:5px;z-index:2}
+.drawer-appearance .wallpaper-saved .wallpaper-more,
+:is(#root,.section-outgoing) .wallpaper-settings .wallpaper-saved .wallpaper-more{width:28px;height:30px;min-height:30px;margin:0;padding:0;background:transparent;color:#08749d;font-size:21px;line-height:28px}
+.wallpaper-menu{position:absolute;top:32px;left:0;min-width:108px;padding:4px;border:1px solid #ffffffd9;border-radius:10px;background:#edfaffeb;box-shadow:0 8px 22px #17394448;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.drawer-appearance .wallpaper-menu button,:is(#root,.section-outgoing) .wallpaper-settings .wallpaper-menu button{display:block;width:100%;min-height:34px;margin:0;padding:5px 9px;text-align:left;color:#075b7d;background:transparent;font-size:12px;white-space:nowrap}
+.drawer-appearance .wallpaper-menu .wallpaper-delete-action,:is(#root,.section-outgoing) .wallpaper-settings .wallpaper-menu .wallpaper-delete-action{color:#a54141}
+.wallpaper-preview{position:relative;width:44px;height:46px;flex:none;display:grid;place-items:center;overflow:hidden;border-radius:7px;background:#0b536d5c;color:#fff}
+.wallpaper-preview img{width:100%;height:100%;object-fit:cover}
+.wallpaper-preview .wallpaper-play{position:absolute;right:3px;bottom:1px;color:#fff;font-size:13px;text-shadow:0 1px 4px #042636}
+.wallpaper-saved-name{min-width:0;flex:1;line-height:1.2}
+.wallpaper-saved-name strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#075b7d}
+.wallpaper-saved-name small{display:block;margin:2px 0 0;font-size:10px}
+.drawer-appearance .wallpaper-saved button{flex:none;margin:0;min-height:31px;padding:4px 7px;font-size:10px}
+.drawer-appearance .wallpaper-saved .wallpaper-delete{width:27px;padding:0;background:transparent;color:#a74343;font-size:19px}
+.drawer-appearance .wallpaper-saved .wallpaper-rename{width:27px;padding:0;background:transparent;color:#08749d;font-size:18px}
+:is(#root,.section-outgoing) .wallpaper-settings .wallpaper-saved button{flex:none;min-height:31px;margin:0;padding:4px 7px;font-size:11px}
+:is(#root,.section-outgoing) .wallpaper-settings .wallpaper-saved .wallpaper-rename{width:27px;padding:0;background:transparent;color:#08749d;font-size:18px}
+:is(#root,.section-outgoing) .wallpaper-settings .wallpaper-saved .wallpaper-delete{width:27px;padding:0;background:transparent;color:#a74343;font-size:19px}
+
+/* Full wallpaper preview keeps one unobtrusive exit control in the top-left. */
+.wallpaper-preview-toggle{
+  position:fixed;top:calc(12px + env(safe-area-inset-top));left:14px;z-index:42;
+  display:grid;place-items:center;width:46px;height:46px;min-height:46px;margin:0;padding:0;
+  border:1px solid #ffffffb8;border-radius:15px;color:#15525c;
+  background:linear-gradient(145deg,#ffffffa8,#e9fbff63);
+  box-shadow:0 5px 20px #193d4618;
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)
+}
+.wallpaper-preview-toggle svg{width:22px;height:22px;stroke:currentColor;stroke-width:1.8;fill:none}
+.wallpaper-preview-toggle svg .preview-dot{fill:currentColor;stroke:none}
+.wallpaper-preview-toggle:active{background:#eaf5f3}
+.wallpaper-preview-mode{overflow:hidden}
+.wallpaper-preview-mode > :not(#trialWallpaper):not(#wallpaperPreviewToggle){visibility:hidden!important}
+.wallpaper-preview-mode :is(#root,.section-outgoing),
+.wallpaper-preview-mode .bottom-nav,
+.wallpaper-preview-mode .section-indicator,
+.wallpaper-preview-mode .drawer-toggle,
+.wallpaper-preview-mode #drawerNav,
+.wallpaper-preview-mode #drawerOverlay{visibility:hidden!important}
+.wallpaper-preview-mode.has-wallpaper .trial-wallpaper{opacity:1!important}
+.wallpaper-preview-mode .wallpaper-preview-toggle{
+  color:#fff;background:rgba(8,33,44,.18);border-color:#ffffff80;
+  text-shadow:0 1px 3px #071e2e;box-shadow:0 3px 12px #071e2e34
+}
+
+:is(#root,.section-outgoing) .wallpaper-settings{margin:10px 0 18px;padding:13px 15px;border-radius:17px}
+:is(#root,.section-outgoing) .wallpaper-settings summary{font-size:15px;color:#164a64}
+:is(#root,.section-outgoing) .wallpaper-settings label,:is(#root,.section-outgoing) .wallpaper-settings p,:is(#root,.section-outgoing) .wallpaper-settings small{font-size:12px;color:#086f9e;font-weight:700}
+:is(#root,.section-outgoing) .wallpaper-settings .drawer-wall-actions button{flex:1;min-height:38px;margin:2px 0;padding:7px 8px;font-size:12px}
+:is(#root,.section-outgoing) .wallpaper-settings .wallpaper-frame-controls{background:#d8f2f5a6}
+
+/* Glass depth comes from bevel, reflection, and shadow; card fill still follows the transparency slider. */
+.card,.task-dashboard,.export-panel,.st-comparison,.md-catalog-card,.group-card,
+.wallpaper-settings,.type-card,.doc-card,.doc-search,.doc-outline,.export-backup{
+  position:relative;
+  border-color:rgba(236,255,255,.84);
+  box-shadow:inset 0 2px 0 rgba(255,255,255,.92),inset 1px 0 0 rgba(255,255,255,.72),
+    inset -1px -2px 0 rgba(24,89,109,.34),inset 0 -7px 13px rgba(29,82,99,.11),
+    0 14px 30px rgba(5,34,52,.24),0 3px 7px rgba(7,48,70,.14)
+}
+.card::before,.task-dashboard::before,.export-panel::before,.st-comparison::before,
+.md-catalog-card::before,.group-card::before,.wallpaper-settings::before,
+.type-card::before,.doc-card::before,.doc-search::before,.doc-outline::before,.export-backup::before{
+  content:"";position:absolute;inset:1px;border-radius:inherit;pointer-events:none;
+  border-top:1px solid rgba(255,255,255,.72);
+  border-left:1px solid rgba(255,255,255,.30);
+  border-bottom:1px solid rgba(15,89,110,.24)
+}
+:is(#root,.section-outgoing) .card .muted,:is(#root,.section-outgoing) .card small,:is(#root,.section-outgoing) .date-meta,:is(#root,.section-outgoing) .task-dashboard small,
+:is(#root,.section-outgoing) .st-comparison small,:is(#root,.section-outgoing) .st-condition,:is(#root,.section-outgoing) .export-heading small,
+:is(#root,.section-outgoing) .yield-record small,:is(#root,.section-outgoing) .yield-mode-caption,:is(#root,.section-outgoing) .md-catalog-caption small,
+.drawer-appearance small,.drawer-appearance p,.drawer-task small,.drawer-task i{
+  color:#087eaa;font-weight:750;letter-spacing:.01em;
+  text-shadow:0 1px 1px #fff,0 0 6px #ffffffed,0 0 11px #ffffffc9
+}
+
+/* Blue lettering with a soft light outline over moving wallpapers. */
+:root{--mode1-ink-blue:#064d75;--mode1-bright-blue:#007faa;--mode1-text-glow:0 1px 1px #fff,0 0 5px #ffffffe6,0 0 10px #a8dcffb3}
+:is(#root,.section-outgoing){color:var(--mode1-ink-blue)}
+:is(#root,.section-outgoing) h1,:is(#root,.section-outgoing) h2,:is(#root,.section-outgoing) h3,:is(#root,.section-outgoing) strong,:is(#root,.section-outgoing) summary,:is(#root,.section-outgoing) label,
+:is(#root,.section-outgoing) .date-meta,:is(#root,.section-outgoing) .export-heading,:is(#root,.section-outgoing) .export-toolbar,:is(#root,.section-outgoing) .export-option,
+:is(#root,.section-outgoing) .wallpaper-settings summary,:is(#root,.section-outgoing) .wallpaper-settings label,
+.drawer-appearance label,.drawer-appearance summary,.drawer-task strong{
+  color:var(--mode1-ink-blue);text-shadow:var(--mode1-text-glow)
+}
+:is(#root,.section-outgoing) .muted,:is(#root,.section-outgoing) small,:is(#root,.section-outgoing) .eyebrow,:is(#root,.section-outgoing) .st-condition,
+:is(#root,.section-outgoing) .card .muted,:is(#root,.section-outgoing) .card small,:is(#root,.section-outgoing) .export-heading small,
+:is(#root,.section-outgoing) .wallpaper-settings p,:is(#root,.section-outgoing) .wallpaper-settings small,
+.drawer-appearance p,.drawer-appearance small,.drawer-task small,.drawer-task i,
+.drawer-section,.drawer-foot{
+  color:var(--mode1-bright-blue);font-weight:750;text-shadow:var(--mode1-text-glow)
+}
+:is(#root,.section-outgoing) .green,:is(#root,.section-outgoing) .internal-results .pass{
+  color:#006b9b;text-shadow:var(--mode1-text-glow)
+}
+:is(#root,.section-outgoing) input,:is(#root,.section-outgoing) select,:is(#root,.section-outgoing) textarea{color:#064d75;text-shadow:none}
+.bottom-nav button,.bottom-nav button.active,.drawer-toggle,.wallpaper-preview-toggle,
+.nav .drawer-link,.nav .drawer-link.active,:is(#root,.section-outgoing) button.secondary{
+  color:var(--mode1-ink-blue);text-shadow:var(--mode1-text-glow)
+}
+.has-wallpaper :is(#root,.section-outgoing) .export-help,.has-wallpaper :is(#root,.section-outgoing)>.muted,
+.has-wallpaper .section-indicator,.has-wallpaper .section-indicator strong{
+  color:#def3ff;text-shadow:0 1px 2px #054467,0 0 5px #054467d9,0 0 9px #c3eaff9c
+}
+:is(#root,.section-outgoing) .hero h1,:is(#root,.section-outgoing) .hero p,:is(#root,.section-outgoing) .hero .eyebrow{
+  color:#e9f7ff;text-shadow:0 1px 3px #073457,0 0 8px #a8dcff80
+}
+.wallpaper-preview-mode .wallpaper-preview-toggle{color:#e9f7ff}
+:is(#root,.section-outgoing) .red,:is(#root,.section-outgoing) .internal-results .fail{color:#9c263c;text-shadow:0 1px 1px #fff,0 0 5px #ffffffd9}
+:is(#root,.section-outgoing) #exportCount,:is(#root,.section-outgoing) .export-run,:is(#root,.section-outgoing) .export-sample summary,:is(#root,.section-outgoing) .export-backup summary{
+  color:var(--mode1-ink-blue);text-shadow:var(--mode1-text-glow)
+}
+:is(#root,.section-outgoing) .internal-results .internal-verdict-icon.pass,:is(#root,.section-outgoing) .internal-overall .internal-verdict-icon.pass{color:#168a37}
+:is(#root,.section-outgoing) .internal-results .internal-verdict-icon.fail,:is(#root,.section-outgoing) .internal-overall .internal-verdict-icon.fail{color:#dc2f43}
+:is(#root,.section-outgoing) .internal-verdict-icon{display:inline-block;font-weight:900;font-size:1.15em;text-shadow:0 1px 1px #fff,0 0 5px #ffffffe6}
+
+/* Keep page-local colors identical on the outgoing composited surface. */
+.trial-wallpaper>video,.trial-wallpaper>img{position:absolute;left:0;top:0;max-width:none;backface-visibility:hidden;will-change:transform}
+:is(#root,.section-outgoing){text-shadow:var(--mode1-text-glow)}
+.nav,.run-options-card{ text-shadow:var(--mode1-text-glow) }
+:is(#root,.section-outgoing) input,:is(#root,.section-outgoing) select,:is(#root,.section-outgoing) textarea,
+:is(#root,.section-outgoing) .pill,:is(#root,.section-outgoing) td,:is(#root,.section-outgoing) th{
+ text-shadow:0 1px 1px #fff,0 0 4px #ffffffeb,0 0 8px #b8e3ff99
+}
+
+/* Only the independent knob handles changes; the track is plain non-interactive HTML. */
+.wallpaper-slider{position:relative;height:36px;margin:3px 0 11px;touch-action:pan-y}
+.wallpaper-slider-track{position:absolute;left:12px;right:12px;top:15px;height:6px;border-radius:6px;background:#acd2dfa3;box-shadow:inset 0 1px 2px #17475940}
+.wallpaper-slider-knob{position:absolute;top:50%;width:24px;height:24px;transform:translate(-50%,-50%);border:2px solid #effff5;border-radius:50%;background:#159154;box-shadow:0 1px 4px #063b3b80,0 0 5px #ffffffb3;touch-action:none;cursor:grab}
+.wallpaper-slider-knob:focus-visible{outline:2px solid #00aaff;outline-offset:3px}
+.wallpaper-slider-knob:active{cursor:grabbing}
+/* Keep backdrop sampling stable while pages translate. Rebuilding every
+   filtered card at the start and end of a swipe can expose a pale frame. */
+/* Keep the glass backdrop fixed while the page compositor translates it. */
+.navigation-sliding :is(#root,.section-outgoing) .card:active{background-color:rgba(240,251,255,var(--ui-card-opacity))!important}
+/* The previous reader animation background must never cover live wallpaper. */
+.section-outgoing{background:transparent!important}
+.date-card,.sample-card,.run-card,.type-card,.template-card{transition:transform .1s ease}
+
+
+/* R9 typography: distinct roles, with soft contrast rather than white letter outlines. */
+:root{
+  --mode1-ink-blue:#244758;
+  --mode1-bright-blue:#0874ae;
+  --mode1-text-glow:0 1px 2px rgba(4,41,65,.24);
+  --type-primary:#18394c;
+  --type-body:#294858;
+  --type-muted:#526d79;
+  --type-blue:#086fa9;
+  --type-green:#087b54;
+  --type-amber:#8d5c12;
+  --type-on-wall:#e7f7ff;
+  --type-on-wall-soft:#c4e6e8
+}
+body,:is(#root,.section-outgoing){color:var(--type-body);font-weight:400;text-shadow:none}
+
+/* Titles on the moving image use a dark, diffuse shadow, never a light stroke. */
+.has-wallpaper :is(#root,.section-outgoing)>h1,
+.has-wallpaper :is(#root,.section-outgoing)>h2,
+.has-wallpaper :is(#root,.section-outgoing) .page-heading>h1,
+.has-wallpaper :is(#root,.section-outgoing) .page-heading>h2,
+.has-wallpaper :is(#root,.section-outgoing) .yield-page>h2,
+.has-wallpaper :is(#root,.section-outgoing)>.muted,
+.has-wallpaper :is(#root,.section-outgoing) .page-heading>.muted,
+.has-wallpaper .section-indicator strong{
+  color:var(--type-on-wall);font-weight:650;
+  text-shadow:0 2px 6px rgba(2,24,43,.82),0 0 12px rgba(3,43,72,.50)
+}
+.has-wallpaper :is(#root,.section-outgoing)>.muted,
+.has-wallpaper :is(#root,.section-outgoing) .page-heading>.muted,
+.has-wallpaper .section-indicator small{
+  color:var(--type-on-wall-soft);font-weight:500;
+  text-shadow:0 2px 5px rgba(2,24,43,.85)
+}
+
+/* Glass cards carry dark ink; accents are reserved for actions and state. */
+:is(#root,.section-outgoing) :is(.card,.task-dashboard,.export-panel,.st-comparison,.md-catalog-card,.group-card,.wallpaper-settings,.type-card,.doc-card,.doc-search,.doc-outline,.export-backup,.trial-import-card,.run-options-card,.markdown-content){
+  color:var(--type-body);text-shadow:none
+}
+:is(#root,.section-outgoing) :is(.card,.task-dashboard,.export-panel,.st-comparison,.md-catalog-card,.group-card,.wallpaper-settings,.type-card,.doc-card,.doc-outline,.export-backup,.run-options-card) :is(h2,h3,h4,strong,b,summary,label),
+:is(#root,.section-outgoing) :is(.template-header,.type-picker-toggle,.yield-grade-open) strong{
+  color:var(--type-primary);font-weight:650;text-shadow:0 0 7px rgba(219,245,255,.32)
+}
+:is(#root,.section-outgoing) :is(.card,.task-dashboard,.export-panel,.st-comparison,.md-catalog-card,.group-card,.wallpaper-settings,.type-card,.doc-card,.doc-outline,.export-backup,.trial-import-card,.run-options-card) :is(.muted,.date-meta,small,p),
+:is(#root,.section-outgoing) :is(.export-heading small,.yield-record small,.yield-mode-caption,.st-condition),
+.drawer-appearance :is(p,small),.drawer-task :is(small,i),.drawer-foot{
+  color:var(--type-muted);font-weight:500;text-shadow:none
+}
+:is(#root,.section-outgoing) :is(.card,.export-panel,.markdown-content,.doc-card) :is(td,th){
+  color:var(--type-body);text-shadow:none
+}
+:is(#root,.section-outgoing) :is(input,select,textarea){
+  color:var(--type-primary);font-weight:500;text-shadow:none
+}
+
+/* Blue for selected controls; green for completed or positive information. */
+:is(#root,.section-outgoing) :is(.export-toolbar,.export-option,.export-heading,.doc-card a,.md-catalog-card a),
+.nav .drawer-link.active,.bottom-nav button.active,.drawer-toggle,.wallpaper-preview-toggle{
+  color:var(--type-blue);font-weight:600;text-shadow:none
+}
+:is(#root,.section-outgoing) :is(.green,.internal-results .pass,.internal-overall .pass),
+:is(#root,.section-outgoing) :is(.pill.green,.step-card.is-ready .title strong),
+.nav .drawer-link.active svg{
+  color:var(--type-green);text-shadow:none
+}
+:is(#root,.section-outgoing) :is(.red,.internal-results .fail,.internal-overall .fail){
+  color:#b12c3b;text-shadow:none
+}
+:is(#root,.section-outgoing) .orange{color:var(--type-amber);text-shadow:none}
+:is(#root,.section-outgoing) .internal-verdict-icon.pass{color:#078a4c;font-weight:750;text-shadow:none}
+:is(#root,.section-outgoing) .internal-verdict-icon.fail{color:#d02d42;font-weight:750;text-shadow:none}
+:is(#root,.section-outgoing) .derived-verdict{display:inline-block;margin-top:5px;font-weight:700}
+:is(#root,.section-outgoing) .derived-verdict.pass{color:var(--type-green)}
+:is(#root,.section-outgoing) .derived-verdict.fail{color:#b12c3b}
+:is(#root,.section-outgoing) .derived-verdict.neutral{color:var(--type-muted)}
+:is(#root,.section-outgoing) :is(.card,.export-panel) :is(.pill.green,.pill.red,.pill.orange) strong{color:inherit;text-shadow:none}
+
+/* Primary buttons and the dark hero keep their intentional light lettering. */
+:is(#root,.section-outgoing) button.secondary,
+:is(#root,.section-outgoing) :is(.yield-grade-open,.template-header,.type-picker-toggle,.more-btn,.date-more,.wallpaper-more,.wallpaper-rename,.doc-outline button){
+  color:var(--type-blue);text-shadow:none
+}
+:is(#root,.section-outgoing) .hero :is(h1,p,.eyebrow),
+.nav .drawer-brand :is(.drawer-brand-name,.drawer-brand-mark,.drawer-close){
+  color:#effbff;text-shadow:0 2px 6px rgba(3,33,47,.52)
+}
+.nav .drawer-brand .drawer-brand-sub{color:#b5e7d6;font-weight:500;text-shadow:0 1px 3px #05293699}
+.nav .drawer-link,.bottom-nav button{color:var(--type-primary);font-weight:550;text-shadow:none}
+.nav .drawer-section{color:var(--type-green);font-weight:650;text-shadow:none}
+.nav .drawer-appearance :is(label,summary){color:var(--type-primary);font-weight:600;text-shadow:none}
+.nav .drawer-appearance :is(.wallpaper-saved-name strong,.wallpaper-gallery>strong){color:var(--type-primary);font-weight:600;text-shadow:none}
+
+/* R11 glass: quiet tint, feathered specular light, and a thin refractive rim. */
+:root{--ui-nested-card-opacity:.24}
+.card,.task-dashboard,.export-panel,.st-comparison,.md-catalog-card,.group-card,
+.wallpaper-settings,.type-card,.doc-card,.doc-search,.doc-outline,.export-backup{
+  background-color:rgba(237,248,252,var(--ui-card-opacity));
+  background-image:
+    linear-gradient(155deg,rgba(255,255,255,var(--ui-glass-highlight-soft)) 0%,
+      transparent 48%,rgba(158,219,239,var(--ui-glass-blue)) 100%);
+  border-color:rgba(237,251,255,.68);
+  -webkit-backdrop-filter:blur(var(--ui-glass-blur)) saturate(1.18);
+  backdrop-filter:blur(var(--ui-glass-blur)) saturate(1.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.73),
+    inset 1px 0 0 rgba(255,255,255,.45),
+    inset -1px 0 0 rgba(35,112,139,.15),
+    inset 0 -1px 0 rgba(10,76,101,.20),
+    0 12px 27px rgba(4,37,55,.15),
+    0 2px 5px rgba(5,40,59,.09)
+}
+.card::before,.task-dashboard::before,.export-panel::before,.st-comparison::before,
+.md-catalog-card::before,.group-card::before,.wallpaper-settings::before,
+.type-card::before,.doc-card::before,.doc-search::before,.doc-outline::before,.export-backup::before{
+  border-top:1px solid rgba(255,255,255,.58);
+  border-left:1px solid rgba(255,255,255,.25);
+  border-right:1px solid rgba(23,101,129,.08);
+  border-bottom:1px solid rgba(10,69,94,.17)
+}
+.card::after,.task-dashboard::after,.export-panel::after,.st-comparison::after,
+.md-catalog-card::after,.group-card::after,.wallpaper-settings::after,
+.type-card::after,.doc-card::after,.doc-search::after,.doc-outline::after,.export-backup::after{
+  content:"";position:absolute;inset:2px;
+  border-radius:inherit;pointer-events:none;
+  background:
+    radial-gradient(ellipse 95% 62% at 4% -13%,rgba(255,255,255,.25),rgba(255,255,255,.08) 42%,transparent 80%),
+    radial-gradient(ellipse 72% 43% at 100% 5%,rgba(220,249,255,.10),transparent 73%)
+}
+
+/* Layered panels should read as separate sheets, without stacking opaque fills. */
+.card .card,.card .group-card,.template-body .card{
+  background-color:rgba(237,248,252,var(--ui-nested-card-opacity));
+  -webkit-backdrop-filter:blur(2px) saturate(1.12);
+  backdrop-filter:blur(2px) saturate(1.12);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.48),0 4px 11px rgba(8,47,68,.10)
+}
+
+/* Controls remain clear against colorful video, with less solid-white plastic. */
+:is(#root,.section-outgoing) :is(.card,.wallpaper-settings,.export-panel) :is(input,select,textarea){
+  background-color:rgba(248,253,255,.86);
+  border-color:rgba(116,170,191,.54)
+}
+:is(#root,.section-outgoing) button.secondary{
+  background-color:rgba(229,245,249,.78);
+  border:1px solid rgba(207,236,244,.64);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.62)
+}
+.drawer-toggle,.wallpaper-preview-toggle{
+  background:linear-gradient(150deg,rgba(246,253,255,.72),rgba(217,240,249,.50));
+  border-color:rgba(238,252,255,.71);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.63),0 6px 18px rgba(5,45,63,.18)
+}
+
+/* R12: keep backdrop sampling fixed; fade only a separate glass-tint layer. */
+:root{--ui-glass-fill:.69;--ui-glass-blur:4px}
+.card,.task-dashboard,.export-panel,.st-comparison,.md-catalog-card,.group-card,
+.wallpaper-settings,.type-card,.doc-card,.doc-search,.doc-outline,.export-backup,.trial-import-card{
+  isolation:isolate;
+  background-color:transparent!important;
+  background-image:none!important;
+  -webkit-backdrop-filter:blur(4px) saturate(1.15);
+  backdrop-filter:blur(4px) saturate(1.15)
+}
+.card::before,.task-dashboard::before,.export-panel::before,.st-comparison::before,
+.md-catalog-card::before,.group-card::before,.wallpaper-settings::before,
+.type-card::before,.doc-card::before,.doc-search::before,.doc-outline::before,.export-backup::before,.trial-import-card::before{
+  content:"";position:absolute;inset:0;border:0;border-radius:inherit;
+  z-index:-1;pointer-events:none;transform:translateZ(0);
+  background:
+    radial-gradient(ellipse 100% 80% at 2% -14%,rgba(255,255,255,.62),transparent 77%),
+    linear-gradient(150deg,rgba(246,253,255,.56),rgba(222,243,250,.40));
+  opacity:var(--ui-glass-fill);
+  will-change:opacity
+}
+.card::after,.task-dashboard::after,.export-panel::after,.st-comparison::after,
+.md-catalog-card::after,.group-card::after,.wallpaper-settings::after,
+.type-card::after,.doc-card::after,.doc-search::after,.doc-outline::after,.export-backup::after,.trial-import-card::after{
+  z-index:-1;
+  background:radial-gradient(ellipse 95% 55% at 4% -10%,rgba(255,255,255,.16),transparent 80%)
+}
+.card .card,.card .group-card,.template-body .card{
+  background-color:transparent!important;
+  background-image:none!important
+}
+.card .card::before,.card .group-card::before,.template-body .card::before{
+  background:linear-gradient(150deg,rgba(250,254,255,.39),rgba(224,244,250,.28))
+}
+.navigation-sliding :is(#root,.section-outgoing) .card:active{background-color:transparent!important}
+:is(#root,.section-outgoing) :is(.card,.task-dashboard,.export-panel,.st-comparison,.group-card,.wallpaper-settings,.type-card,.doc-card,.export-backup) :is(p,small,.muted,.date-meta){
+  color:#173d50;font-weight:500;text-shadow:0 0 7px rgba(237,252,255,.42)
+}
+
+/* R13: match the native WebView backing during video startup and resume. */
+html:has(body.has-wallpaper){background:#153d59}
+body.has-wallpaper,.has-wallpaper .trial-wallpaper{background:#153d59}
+/* A soft green light edge makes the small timer verdict readable over video. */
+:is(#root,.section-outgoing) .step-card .pill.green{
+  color:#087b54;
+  text-shadow:0 1px 1px rgba(2,38,31,.32),0 0 5px rgba(70,244,162,.56),0 0 11px rgba(31,186,114,.38)
+}
+
+/* R14: glass chrome, tint and blur live on fading layers. At 100% the
+   card itself has no fill, blur, rim or shadow; its contents stay usable. */
+:root{--ui-glass-fill:.673;--ui-slide-glass:1}
+.navigation-sliding{--ui-slide-glass:0}
+.card,.task-dashboard,.export-panel,.st-comparison,.md-catalog-card,.group-card,
+.wallpaper-settings,.type-card,.doc-card,.doc-search,.doc-outline,.export-backup,.trial-import-card{
+  border-color:transparent!important;
+  box-shadow:none!important;
+  -webkit-backdrop-filter:none!important;
+  backdrop-filter:none!important
+}
+.card::before,.task-dashboard::before,.export-panel::before,.st-comparison::before,
+.md-catalog-card::before,.group-card::before,.wallpaper-settings::before,
+.type-card::before,.doc-card::before,.doc-search::before,.doc-outline::before,.export-backup::before,.trial-import-card::before{
+  -webkit-backdrop-filter:blur(4px) saturate(1.15);
+  backdrop-filter:blur(4px) saturate(1.15);
+  border:1px solid rgba(237,251,255,.68);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.73),inset 1px 0 0 rgba(255,255,255,.45),
+    inset -1px 0 0 rgba(35,112,139,.15),inset 0 -1px 0 rgba(10,76,101,.20),
+    0 12px 27px rgba(4,37,55,.15),0 2px 5px rgba(5,40,59,.09);
+  opacity:calc(var(--ui-glass-fill) * var(--ui-slide-glass));
+  transition:opacity 220ms cubic-bezier(.22,.75,.25,1)
+}
+.card::after,.task-dashboard::after,.export-panel::after,.st-comparison::after,
+.md-catalog-card::after,.group-card::after,.wallpaper-settings::after,
+.type-card::after,.doc-card::after,.doc-search::after,.doc-outline::after,.export-backup::after,.trial-import-card::after{
+  opacity:calc(var(--ui-glass-fill) * var(--ui-slide-glass));
+  transition:opacity 220ms cubic-bezier(.22,.75,.25,1)
+}

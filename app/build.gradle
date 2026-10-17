@@ -1,0 +1,15 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.example.asphaltnotes'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.example.asphaltmode1test'
+        minSdk 26
+        targetSdk 35
+        versionCode 97
+        versionName '5.46 R18 测试'
+    }
+    sourceSets { main { manifest.srcFile 'AndroidManifest.xml'; java.srcDirs = ['src']; res.srcDirs = ['res']; assets.srcDirs = ['assets'] } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}

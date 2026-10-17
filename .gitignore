@@ -1,0 +1,16 @@
+*.apk
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.pem
+*.key
+*password*
+*secret*
+native_build/
+test_build/
+qa/
+__pycache__/
+.gradle/
+build/
+outputs/
