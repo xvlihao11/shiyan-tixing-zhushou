@@ -11,6 +11,7 @@ const source=[
   "function rotationInputIsMilli(r){return isRotationalViscosity(r)&&/^mpa(?:\\.?)s?$/.test(normalizedViscosityUnit(r.rotationInputUnit||r.unit))}",
   "function rotationValueInPa(r,value){const n=Number(value);return Number.isFinite(n)?(rotationInputIsMilli(r)?n/1000:n):n}",
   part(html,'function resultQuantum(', 'function derivedMarkdown('),
+  part(html,'function exportResult(', 'function markdown('),
   part(internal,'function parseInternalLimit(', 'function resolveInternalBinding('),
   part(internal,'function evaluateDerivedViscosity(', 'function internalMetricCandidates('),
   part(html,'const md=x=>', 'function download('),
@@ -37,6 +38,7 @@ const report=ctx.markdown('s');
 assert(report.includes('| 样品 | 组别 | 实验项目 | 单位 | 结果 | 原始读数 | 温度条件 | 采用标准 | 评价 |'));
 assert(report.includes('60 ℃动力粘度 · 黏度比'));
 assert(report.includes('✅ 合格（内控 ≤300 %）'));
+assert(report.includes('| 100 |'));
 assert(!report.includes('### 老化前后计算结果'));
 assert(!ctx.markdown('s','before').includes('黏度比'));
 original.groups[0].name=aged.groups[0].name='试样';
@@ -62,4 +64,6 @@ assert.strictEqual(ctx.derivedResults('s').length,0);
 const rotational={name:'135 ℃旋转黏度',unit:'Pa·s',rotationInputUnit:'mPa·s'};
 assert.strictEqual(ctx.rotationValueInPa(rotational,1250),1.25);
 assert.strictEqual(ctx.rotationValueInPa(rotational,500),.5);
+ctx.db.runs=[{id:'rot',sampleId:'s',phase:'原样',name:'135 ℃旋转黏度',unit:'Pa·s',rotationInputUnit:'Pa·s',temp:'135',groups:[{name:'试样',readings:['1.25']}]}];
+assert(ctx.markdown('s').includes('| 1.25 |'));
 console.log('dynamic viscosity ratio and internal limit smoke passed');
