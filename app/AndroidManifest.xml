@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.asphaltmode1test" android:versionCode="98" android:versionName="5.46 R19 测试">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.asphaltmode1test" android:versionCode="99" android:versionName="5.46 R20 测试">
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
@@ -6,7 +6,7 @@
 <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 <uses-permission android:name="android.permission.INTERNET"/>
 <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
-<uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/><application android:label="沥青助手 测试R19" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:usesCleartextTraffic="false" android:allowBackup="true" android:enableOnBackInvokedCallback="false">
+<uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/><application android:label="沥青助手 测试R20" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:usesCleartextTraffic="false" android:allowBackup="true" android:enableOnBackInvokedCallback="false">
 <activity android:name="com.example.asphaltnotes.cloudtrial.MainActivity" android:exported="true" android:enableOnBackInvokedCallback="false"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
 <activity android:name="com.example.asphaltnotes.cloudtrial.AlarmActivity" android:exported="false" android:excludeFromRecents="true" android:showWhenLocked="true" android:turnScreenOn="true"/>
 <receiver android:name="com.example.asphaltnotes.cloudtrial.ReminderReceiver" android:exported="false"/>
