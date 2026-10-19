@@ -381,7 +381,7 @@ function mdCell(x){return String(x??'').replace(/\s+/g,' ').trim().replace(/\|/g
 function exportTemperature(value){const text=String(value??'').trim();if(!text)return '—';const bare=text.replace(/\s*(?:℃|°\s*C)\s*$/i,'').trim();return /\d/.test(bare)?bare+' ℃':text}
 function exportRunTemperature(run){const value=exportTemperature(run.temp);return (isSoftening(run)?'起始':'试验')+' '+(value==='—'?'未填写':value)}
 function exportEvaluation(run,group){const result=evaluateInternal(run,group);return result.state==='pass'?'✅ 合格':result.state==='fail'?'❌ 不合格':'未判定'}
-function exportResult(run,group){const value=avg(run,group);if(value==='—')return value;const n=Number(value);if(!Number.isFinite(n))return value;if(/动力[黏粘]度/.test(String(run.name||'')))return String(Math.round(n));if(/旋转黏度/.test(String(run.name||'')))return n.toFixed(2);return value}
+function exportResult(run,group){const value=avg(run,group);if(value==='—')return value;const n=Number(value);if(!Number.isFinite(n))return value;if(/动力[黏粘]度/.test(String(run.name||'')))return String(Math.round(n));if(/旋转[黏粘]度/.test(String(run.name||'')))return n.toFixed(2);return value}
 function markdown(sampleId='all',runId='all',date='all',includeDetails=false){
   const samples=exportSamplesFor(date).filter(s=>sampleId==='all'||s.id===sampleId)
     .filter(s=>runId==='all'||db.runs.some(r=>r.id===runId&&r.sampleId===s.id));

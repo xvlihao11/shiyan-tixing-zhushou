@@ -64,6 +64,6 @@ assert.strictEqual(ctx.derivedResults('s').length,0);
 const rotational={name:'135 ℃旋转黏度',unit:'Pa·s',rotationInputUnit:'mPa·s'};
 assert.strictEqual(ctx.rotationValueInPa(rotational,1250),1.25);
 assert.strictEqual(ctx.rotationValueInPa(rotational,500),.5);
-ctx.db.runs=[{id:'rot',sampleId:'s',phase:'原样',name:'135 ℃旋转黏度',unit:'Pa·s',rotationInputUnit:'Pa·s',temp:'135',groups:[{name:'试样',readings:['1.25']}]}];
+ctx.db.runs=[{id:'rot',sampleId:'s',phase:'原样',name:'135 ℃旋转粘度',unit:'Pa·s',rotationInputUnit:'Pa·s',temp:'135',groups:[{name:'试样',readings:['1.25']}]}];
 assert(ctx.markdown('s').includes('| 1.25 |'));
 console.log('dynamic viscosity ratio and internal limit smoke passed');
