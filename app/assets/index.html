@@ -390,20 +390,22 @@ function markdown(sampleId='all',runId='all',date='all',includeDetails=false){
     const runs=db.runs.filter(r=>r.sampleId===sample.id&&(runId==='all'||r.id===runId)&&!isHeating(r)
       &&r.groups?.some(g=>g.readings?.some(v=>String(v).trim()!==''&&Number.isFinite(Number(v)))));
     if(!runs.length)continue;
-    const hasNotes=runs.some(r=>(r.groups||[]).some(g=>(g.readings||[]).some(v=>String(v).trim()!==''&&Number.isFinite(Number(v)))&&String(g.notes??'').trim()!==''));
-    out.push('',`## 样品：${mdCell(sample.name)}`,'',
-      '| 样品 | 实验项目 | 组别 | 温度条件 | 采用标准 | 原始读数 | 结果 | 单位 |'+(hasNotes?' 备注 |':'')+' 评价 |',
-      '| --- | --- | --- | --- | --- | --- | ---: | --- |'+(hasNotes?' --- |':'')+' --- |');
+    const derived=derivedResults(sample.id).filter(x=>runId==='all'||x.runId===runId);
+    const tableRows=[];
     for(const run of runs){
       const title=(run.phase&&run.phase!=='原样'?run.phase+' · ':'')+run.name;
       for(const group of run.groups||[]){
         if(!(group.readings||[]).some(v=>String(v).trim()!==''&&Number.isFinite(Number(v))))continue;
         const readings=isAgingMassLoss(run)?mdCell(agingMassReadingText(group)):(group.readings||[]).map(v=>String(v).trim()?mdCell(v):'—').join('、');
-        out.push(`| ${mdCell(sample.name)} | ${mdCell(title)} | ${mdCell(group.name)} | ${mdCell(exportRunTemperature(run))} | ${mdCell(run.standard)} | ${readings} | ${mdCell(avg(run,group))} | ${mdCell(resultUnit(run))} |${hasNotes?' '+mdCell(group.notes)+' |':''} ${mdCell(exportEvaluation(run,group))} |`);
+        tableRows.push({sample:sample.name,group:group.name,title,unit:resultUnit(run),result:avg(run,group),readings,temperature:exportRunTemperature(run),standard:run.standard,evaluation:exportEvaluation(run,group)});
       }
     }
-    const derived=derivedResults(sample.id).filter(x=>runId==='all'||x.runId===runId);
-    for(const item of derived.filter(x=>x.evaluation))out.push(`| ${mdCell(sample.name)} | ${mdCell(item.projectName)} | ${mdCell(item.groupName)} | ${mdCell(exportTemperature(item.temperature))} | ${mdCell(item.standard)} | ${mdCell(item.formula)} | ${mdCell(Math.round(item.ratio*100)/100)} | ${mdCell(item.unit)} |${hasNotes?' — |':''} ${mdCell((item.evaluation.state==='pass'?'✅ 合格':item.evaluation.state==='fail'?'❌ 不合格':'未判定')+(item.evaluation.limit?'（'+item.evaluation.limit+'）':''))} |`);
+    for(const item of derived.filter(x=>x.evaluation))tableRows.push({sample:sample.name,group:item.groupName,title:item.projectName,unit:item.unit,result:Math.round(item.ratio*100)/100,readings:item.formula,temperature:exportTemperature(item.temperature),standard:item.standard,evaluation:(item.evaluation.state==='pass'?'✅ 合格':item.evaluation.state==='fail'?'❌ 不合格':'未判定')+(item.evaluation.limit?'（'+item.evaluation.limit+'）':'')});
+    const showGroup=tableRows.some(row=>String(row.group??'').trim()!==String(sample.name??'').trim());
+    out.push('',`## 样品：${mdCell(sample.name)}`,'',
+      `| 样品 | ${showGroup?'组别 | ':''}实验项目 | 单位 | 结果 | 原始读数 | 温度条件 | 采用标准 | 评价 |`,
+      `| --- | ${showGroup?'--- | ':''}--- | --- | ---: | --- | --- | --- | --- |`);
+    for(const row of tableRows)out.push(`| ${mdCell(row.sample)} | ${showGroup?mdCell(row.group)+' | ':''}${mdCell(row.title)} | ${mdCell(row.unit)} | ${mdCell(row.result)} | ${row.readings} | ${mdCell(row.temperature)} | ${mdCell(row.standard)} | ${mdCell(row.evaluation)} |`);
     out.push('',`日期：${day} · 样品数量：${sample.sampleCount||1}`);
     const otherDerived=derived.filter(x=>!x.evaluation);
     if(otherDerived.length)out.push('','### 老化前后计算结果','',
