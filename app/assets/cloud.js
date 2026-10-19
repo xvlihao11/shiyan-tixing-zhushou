@@ -103,6 +103,7 @@ function applyPhotoReadings(groupId,photoId,attemptId){
   values.forEach((v,i)=>{if(v!=='')group.readings[i]=v});
   attempt.appliedValues=values.slice();attempt.appliedAt=Date.now();attempt.status='applied';
   group.readingHistory=group.readingHistory||[];group.readingHistory.push({at:Date.now(),source:'photo',photoId,attemptId,values:group.readings.slice()});
+  if(resultsComplete(run)){normalizeRotationRun(run);completeRun(run)}
   persistPhotos();render();
 }
 function recordManualReadingHistory(run){for(const group of run.groups||[]){if(!group.photos?.length)continue;const h=group.readingHistory=group.readingHistory||[],last=h[h.length-1];if(!last||JSON.stringify(last.values)!==JSON.stringify(group.readings))h.push({at:Date.now(),source:'manual',values:group.readings.slice()})}}
