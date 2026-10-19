@@ -6,6 +6,10 @@ const html=fs.readFileSync(path.join(__dirname,'app/assets/index.html'),'utf8');
 const internal=fs.readFileSync(path.join(__dirname,'app/assets/internal_standards.js'),'utf8');
 function part(text,start,end){const i=text.indexOf(start),j=text.indexOf(end,i);assert(i>=0&&j>i,start);return text.slice(i,j)}
 const source=[
+  "function isRotationalViscosity(r){return /旋转[黏粘]度/.test(String(r?.name||''))}",
+  "function normalizedViscosityUnit(unit){return String(unit||'').replace(/\\s/g,'').replace(/[·。]/g,'.').toLowerCase()}",
+  "function rotationInputIsMilli(r){return isRotationalViscosity(r)&&/^mpa(?:\\.?)s?$/.test(normalizedViscosityUnit(r.rotationInputUnit||r.unit))}",
+  "function rotationValueInPa(r,value){const n=Number(value);return Number.isFinite(n)?(rotationInputIsMilli(r)?n/1000:n):n}",
   part(html,'function resultQuantum(', 'function derivedMarkdown('),
   part(internal,'function parseInternalLimit(', 'function resolveInternalBinding('),
   part(internal,'function evaluateDerivedViscosity(', 'function internalMetricCandidates('),
@@ -50,4 +54,7 @@ assert.strictEqual(ctx.derivedResults('s').length,0);
 aged.temp='60';
 original.groups[0].readings=[''];
 assert.strictEqual(ctx.derivedResults('s').length,0);
+const rotational={name:'135 ℃旋转黏度',unit:'Pa·s',rotationInputUnit:'mPa·s'};
+assert.strictEqual(ctx.rotationValueInPa(rotational,1250),1.25);
+assert.strictEqual(ctx.rotationValueInPa(rotational,500),.5);
 console.log('dynamic viscosity ratio and internal limit smoke passed');

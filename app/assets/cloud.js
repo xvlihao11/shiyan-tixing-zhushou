@@ -1,6 +1,6 @@
 let photoPending=null;
 const activePhotoAttempts=new Set();
-function canCloudRecognize(run){return isAgingMassLoss(run)||/软化点|针入度|延度|延伸度|旋转[黏粘]度/.test(String(run.name||''))}
+function canCloudRecognize(run){return isAgingMassLoss(run)||/软化点|针入度|延度|延伸度|旋转[黏粘]度|动力[黏粘]度/.test(String(run.name||''))}
 function cloudSettingsUI(){
   const ready=!!(window.Android&&Android.hasArkKey&&Android.hasArkKey());
   return `<div class="card"><details><summary>云端识别设置· ${ready?'已保存密钥':'待填写密钥'}</summary><p class="muted">填写火山方舟 API 密钥。密钥加密保存在本机；识别时照片会上传至火山方舟，识别结果需由你核对。</p><input id="arkKey" type="password" autocomplete="off" placeholder="在这里输入新密钥（不会显示原密钥）"><div class="step-actions"><button class="secondary" onclick="saveCloudKey()">保存密钥</button>${ready?'<button class="secondary" onclick="clearCloudKey()">移除密钥</button>':''}</div></details></div>`;
@@ -8,7 +8,7 @@ function cloudSettingsUI(){
 function saveCloudKey(){let v=get('arkKey')?.value.trim();if(!v)return alert('请填写新密钥');if(!window.Android||!Android.saveArkKey(v))return alert('密钥保存失败');get('arkKey').value='';render()}
 function clearCloudKey(){if(!window.Android)return;Android.clearArkKey();render()}
 function cloudReady(){if(window.Android&&Android.hasArkKey&&Android.hasArkKey())return true;alert('请先到“设置”保存 API 密钥');return false}
-function cloudExpectedCount(run,group){return isAgingMassLoss(run)?3:isSoftening(run)?2:/延度|延伸度|针入度|旋转[黏粘]度/.test(run.name)?Math.max(3,group.readings.length):Math.max(1,group.readings.length)}
+function cloudExpectedCount(run,group){return isAgingMassLoss(run)?3:isSoftening(run)?2:/延度|延伸度|针入度|旋转[黏粘]度|动力[黏粘]度/.test(run.name)?Math.max(3,group.readings.length):Math.max(1,group.readings.length)}
 function cloudLabelIndex(run,label){
   let t=String(label||'').replace(/\s/g,'');
   if(/平均|当前|温度|时间|转速|拉力|仪器/.test(t))return -1;
@@ -23,6 +23,11 @@ function cloudLabelIndex(run,label){
     const numbered=t.match(/(?:第)?([123])(?:次|号|组|[:：]|$)/)||t.match(/(?:黏度|粘度)([123])/);
     if(numbered)return Number(numbered[1])-1;
     if(/旋转[黏粘]度|^(?:黏度|粘度)(?:值|读数)?$/.test(t))return 0;
+  }
+  if(/动力[黏粘]度/.test(run.name)){
+    const numbered=t.match(/(?:第)?([123])(?:次|号|组|[:：]|$)/)||t.match(/(?:动力)?[黏粘]度([123])/);
+    if(numbered)return Number(numbered[1])-1;
+    if(/动力[黏粘]度|^(?:动力)?[黏粘]度(?:值|读数)?$/.test(t))return 0;
   }
   if(isSoftening(run)){
     if(/上部|软化点[1ＡA]/i.test(t))return 0;
@@ -107,7 +112,7 @@ function photoReviewHTML(run,group,photo,a){
   if(a.status==='loading')return '<p class="photo-state" role="status">正在上传识别…照片已保存在本机</p>';
   if(a.status==='error')return `<p class="photo-error">${esc(a.error)}</p>`;
   if(a.status!=='review')return '';
-  const labels=isAgingMassLoss(run)?AGING_MASS_LABELS:isSoftening(run)?(isSegregation(run,group)?['上部软化点','下部软化点']:['软化点 1 / A','软化点 2 / B']):/旋转[黏粘]度/.test(run.name)?['旋转黏度 1','旋转黏度 2','旋转黏度 3']:['读数 1','读数 2','读数 3'];
+  const labels=isAgingMassLoss(run)?AGING_MASS_LABELS:isSoftening(run)?(isSegregation(run,group)?['上部软化点','下部软化点']:['软化点 1 / A','软化点 2 / B']):/旋转[黏粘]度/.test(run.name)?['旋转黏度 1','旋转黏度 2','旋转黏度 3']:/动力[黏粘]度/.test(run.name)?['动力黏度 1','动力黏度 2','动力黏度 3']:['读数 1','读数 2','读数 3'];
   return `<div class="photo-review"><strong>核对后填入</strong><p class="muted">请核对小数点与标签，保留原始读数。${esc(a.note||'')}${!a.candidates.length?'未识别出读数，可手填或重新识别。':''}</p>${a.reviewValues.map((v,i)=>`<label for="photoValue_${a.id}_${i}">${esc(labels[i]||'读数 '+(i+1))}</label><div class="photo-review-row"><input id="photoValue_${a.id}_${i}" type="number" step="any" value="${esc(v)}" oninput="editPhotoReview('${group.id}','${photo.id}','${a.id}',${i},this.value)"><select aria-label="候选读数" onchange="choosePhotoCandidate('${group.id}','${photo.id}','${a.id}',${i},this)"><option value="">选择候选值</option>${a.candidates.map(c=>`<option value="${esc(c.value)}">${esc(c.label)}：${esc(c.value)}</option>`).join('')}</select></div>`).join('')}<div class="step-actions"><button onclick="applyPhotoReadings('${group.id}','${photo.id}','${a.id}')">核对后填入</button></div></div>`;
 }
 function photoGroupUI(run,group){
