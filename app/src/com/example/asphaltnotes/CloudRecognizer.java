@@ -27,9 +27,10 @@ final class CloudRecognizer {
       String image="data:image/jpeg;base64,"+Base64.encodeToString(imageBytes(context,photo),Base64.NO_WRAP);
       String prompt="你是沥青实验仪器屏幕的原始读数提取器。当前实验类型："+experiment+"。"
         +"只提取已完成的原始测量读数，按照屏幕标签分别记录软化点1/2、软化点A/B、延度或延伸度1/2/3、针入度1/2/3、旋转黏度或旋转粘度1/2/3、动力黏度或动力粘度1/2/3。动力黏度可能来自手写记录，请识别清晰可见的手写数字，不要猜测模糊数字。若是TRFOT、RTFOT或TFOT老化，分别提取空容器质量、老化前容器加沥青总质量、老化后容器加沥青总质量，并用这三个固定标签输出。电子天平照片若只有一个可信质量数值而无法判定其所属阶段，仍输出该数值，标签写待核对质量，由用户手动对应，不要猜测阶段。"
+        +"旋转粘度照片请同时提取每个读数的单位，mPa.s、mPa·s、mPas、cP 都按 mPa·s 输出，Pa.s、Pa·s 按 Pa·s 输出。不要自行换算数值，由软件按单位换算。只有一个清晰粘度读数也应输出为旋转粘度1；单位看不清时 unit 留空，不要猜测。"
         +"忽略平均值、温度（包括当前温度和测量温度）、运行时间、时钟、转速、当前长度、拉力、仪器型号、按钮和未完成的读数。"
         +"保持原始小数位，不计算平均值，不修约；模糊或看不清的数字不要猜测。"
-        +"只输出合法JSON对象，格式为{\"readings\":[{\"label\":\"软化点A\",\"value\":\"83.78\"}],\"note\":\"\"}。"
+        +"只输出合法JSON对象，格式为{\"readings\":[{\"label\":\"软化点A\",\"value\":\"83.78\",\"unit\":\"℃\"}],\"note\":\"\"}。"
         +"value只能是数字字符串；如果没有可信读数就让readings为空数组。不要输出Markdown。";
       JSONObject request=new JSONObject()
         .put("model",MODEL).put("temperature",0.1).put("max_output_tokens",1024)
@@ -69,7 +70,7 @@ final class CloudRecognizer {
       if(raw!=null)for(int i=0;i<raw.length();i++){
         JSONObject item=raw.optJSONObject(i);if(item==null)continue;
         String label=item.optString("label","").trim(),value=item.optString("value","").trim();
-        if(!label.isEmpty()&&value.matches("[+-]?\\d+(?:\\.\\d+)?"))readings.put(new JSONObject().put("label",label).put("value",value));
+        if(!label.isEmpty()&&value.matches("[+-]?\\d+(?:\\.\\d+)?"))readings.put(new JSONObject().put("label",label).put("value",value).put("unit",item.optString("unit","")));
       }
       valid.put("readings",readings).put("note",parsed.optString("note",""));
       return valid;

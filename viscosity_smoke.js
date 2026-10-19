@@ -67,3 +67,18 @@ assert.strictEqual(ctx.rotationValueInPa(rotational,500),.5);
 ctx.db.runs=[{id:'rot',sampleId:'s',phase:'原样',name:'135 ℃旋转粘度',unit:'Pa·s',rotationInputUnit:'Pa·s',temp:'135',groups:[{name:'试样',readings:['1.25']}]}];
 assert(ctx.markdown('s').includes('| 1.25 |'));
 console.log('dynamic viscosity ratio and internal limit smoke passed');
+// Existing records use the same export path; formatting must not mutate readings.
+for(const name of ['动力粘度','动力黏度','RTFOT 老化后动力粘度']){
+  const run={id:'old',sampleId:'s',name,unit:'Pa·s',created:1,groups:[{name:'试样',readings:['123.456']}]};
+  ctx.db.runs=[run];
+  assert(ctx.markdown('s').includes('| Pa·s | 123 | 123.456 |'));
+  assert.strictEqual(run.groups[0].readings[0],'123.456');
+}
+for(const name of ['旋转粘度','旋转黏度']){
+  const run={id:'old',sampleId:'s',name,unit:'Pa·s',rotationInputUnit:'Pa·s',groups:[{name:'试样',readings:['1.2']}]};
+  ctx.db.runs=[run];
+  assert(ctx.markdown('s').includes('| Pa·s | 1.20 | 1.2 |'));
+  run.groups[0].readings=['1.256'];
+  assert(ctx.markdown('s').includes('| Pa·s | 1.26 | 1.256 |'));
+}
+console.log('existing-record export precision passed');

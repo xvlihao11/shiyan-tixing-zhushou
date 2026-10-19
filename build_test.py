@@ -28,6 +28,13 @@ def main():
     run([java, '-jar', tools/'lib/apksigner.jar', 'sign', '--ks', key, '--ks-key-alias', 'mode1-test', '--ks-pass', 'file:'+str(password), '--v1-signing-enabled', 'true', '--v2-signing-enabled', 'true', '--out', out, build/'aligned.apk'])
     run([java, '-jar', tools/'lib/apksigner.jar', 'verify', '--verbose', '--print-certs', out])
     run([tools/'zipalign.exe', '-c', '-p', '4', out])
+    # Verify the delivered APK, not only the source tree or staging directory.
+    with ZipFile(out) as package:
+        for asset in (root/'app/assets').rglob('*'):
+            if asset.is_file():
+                entry='assets/'+asset.relative_to(root/'app/assets').as_posix()
+                if package.read(entry)!=asset.read_bytes():
+                    raise RuntimeError('APK asset does not match build source: '+entry)
     run([tools/'aapt2.exe', 'dump', 'badging', out])
 
 if __name__ == '__main__':

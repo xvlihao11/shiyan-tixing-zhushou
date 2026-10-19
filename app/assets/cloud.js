@@ -1,5 +1,7 @@
 let photoPending=null;
 const activePhotoAttempts=new Set();
+function photoViscosityUnit(unit){const text=normalizedViscosityUnit(unit);return /^(?:mpa\.?s|cp)$/.test(text)?'mPa·s':/^pa\.?s$/.test(text)?'Pa·s':''}
+function editPhotoUnit(groupId,photoId,attemptId,index,unit){const {attempt}=photoAttempt(groupId,photoId,attemptId);if(!attempt)return;attempt.reviewUnits=attempt.reviewUnits||[];attempt.reviewUnits[index]=unit;persistPhotos()}
 function canCloudRecognize(run){return isAgingMassLoss(run)||/软化点|针入度|延度|延伸度|旋转[黏粘]度|动力[黏粘]度/.test(String(run.name||''))}
 function cloudSettingsUI(){
   const ready=!!(window.Android&&Android.hasArkKey&&Android.hasArkKey());
@@ -11,6 +13,7 @@ function cloudReady(){if(window.Android&&Android.hasArkKey&&Android.hasArkKey())
 function cloudExpectedCount(run,group){return isAgingMassLoss(run)?3:isSoftening(run)?2:/延度|延伸度|针入度|旋转[黏粘]度|动力[黏粘]度/.test(run.name)?Math.max(3,group.readings.length):Math.max(1,group.readings.length)}
 function cloudLabelIndex(run,label){
   let t=String(label||'').replace(/\s/g,'');
+  if(isRotationalViscosity(run)&&/^(?:当前|实时)?[黏粘]度(?:值|读数)?$/.test(t))return 0;
   if(/平均|当前|温度|时间|转速|拉力|仪器/.test(t))return -1;
   if(isAgingMassLoss(run)){
     if(/空容器|空瓶|容器空重|空皿|皮重/.test(t))return 0;
@@ -69,10 +72,12 @@ window.onNativePhotoEvent=function(event){
       }else if(event.type==='result'){
         const photo=group.photos?.find(x=>x.id===p.photoId),attempt=photo?.attempts?.find(x=>x.id===p.attemptId);
         if(attempt&&!attempt.finishedAt){
-          const candidates=(Array.isArray(p.readings)?p.readings:[]).filter(x=>x&&typeof x.label==='string'&&/^[-+]?\d+(?:\.\d+)?$/.test(String(x.value))).map(x=>({label:x.label,value:String(x.value)}));
+          const candidates=(Array.isArray(p.readings)?p.readings:[]).filter(x=>x&&typeof x.label==='string'&&/^[-+]?\d+(?:\.\d+)?$/.test(String(x.value))).map(x=>({label:x.label,value:String(x.value),unit:String(x.unit||'')}));
           const values=Array(cloudExpectedCount(run,group)).fill('');
-          for(const x of candidates){const i=cloudLabelIndex(run,x.label);if(i>=0&&i<values.length&&!values[i])values[i]=x.value}
-          Object.assign(attempt,{finishedAt:Date.now(),status:p.error?'error':'review',error:p.error||'',note:p.note||'',candidates,originalValues:values.slice(),reviewValues:values.slice()});
+          const units=Array(values.length).fill('');
+          for(const x of candidates){const i=cloudLabelIndex(run,x.label);if(i>=0&&i<values.length&&!values[i]){values[i]=x.value;units[i]=photoViscosityUnit(x.unit)}}
+          if(isRotationalViscosity(run)&&!values.some(Boolean)&&candidates.length===1&&photoViscosityUnit(candidates[0].unit)){values[0]=candidates[0].value;units[0]=photoViscosityUnit(candidates[0].unit)}
+          Object.assign(attempt,{finishedAt:Date.now(),status:p.error?'error':'review',error:p.error||'',note:p.note||'',candidates,originalValues:values.slice(),reviewValues:values.slice(),reviewUnits:units});
           activePhotoAttempts.delete(attempt.id);persistPhotos();
         }
       }else if(event.type==='error'){photoPending={runId:run.id,groupId:group.id,message:p.error||'照片操作未完成'};}
@@ -91,17 +96,21 @@ function recognizeSavedPhoto(runId,groupId,photoId){
 }
 function photoAttempt(groupId,photoId,attemptId){for(const run of db.runs){const group=run.groups?.find(g=>g.id===groupId),photo=group?.photos?.find(p=>p.id===photoId),attempt=photo?.attempts?.find(a=>a.id===attemptId);if(attempt)return {run,group,photo,attempt}}return {}}
 function editPhotoReview(groupId,photoId,attemptId,index,value){const {attempt}=photoAttempt(groupId,photoId,attemptId);if(!attempt)return;attempt.reviewValues[index]=value;persistPhotos()}
-function choosePhotoCandidate(groupId,photoId,attemptId,index,select){if(select.value==='')return;const input=get('photoValue_'+attemptId+'_'+index);if(input)input.value=select.value;editPhotoReview(groupId,photoId,attemptId,index,select.value)}
+function choosePhotoCandidate(groupId,photoId,attemptId,index,select){if(select.value==='')return;const {run,attempt}=photoAttempt(groupId,photoId,attemptId),candidate=attempt?.candidates?.[Number(select.value)];if(!candidate)return;const input=get('photoValue_'+attemptId+'_'+index);if(input)input.value=candidate.value;editPhotoReview(groupId,photoId,attemptId,index,candidate.value);if(isRotationalViscosity(run)){editPhotoUnit(groupId,photoId,attemptId,index,photoViscosityUnit(candidate.unit));refreshPhotoPanel(run.id,groupId)}}
 function applyPhotoReadings(groupId,photoId,attemptId){
   const {run,group,attempt}=photoAttempt(groupId,photoId,attemptId);if(!attempt||attempt.status!=='review')return;
   const values=attempt.reviewValues.map(v=>String(v).trim());
   if(!values.some(Boolean))return alert('没有可填入的读数，可手填或重新识别');
   if(values.some(v=>v!==''&&!/^[-+]?\d+(?:\.\d+)?$/.test(v)))return alert('请核对读数格式');
+  const rotational=isRotationalViscosity(run);
+  if(rotational&&values.some((v,i)=>v!==''&&!photoViscosityUnit(attempt.reviewUnits?.[i])))return alert('请核对每个旋转粘度读数的单位：仪器显示 mPa.s 时请选择 mPa·s');
+  const applied=values.map((v,i)=>v!==''&&rotational?String(Number(v)/(photoViscosityUnit(attempt.reviewUnits[i])==='mPa·s'?1000:1)):v);
   preserveVisibleDraft();
-  if(values.some((v,i)=>v!==''&&String(group.readings[i]??'')!==''&&String(group.readings[i])!==v)&&!confirm('这次填入将替换本组对应的已有读数，确定吗？'))return;
+  if(applied.some((v,i)=>v!==''&&String(group.readings[i]??'')!==''&&Number(rotationValueInPa(run,group.readings[i]))!==Number(v))&&!confirm('这次填入将替换本组对应的已有读数，确定吗？'))return;
+  if(rotational){normalizeRotationRun(run);run.unit='Pa·s';run.rotationInputUnit='Pa·s'}
   attempt.beforeValues=group.readings.slice();while(group.readings.length<values.length)group.readings.push('');
-  values.forEach((v,i)=>{if(v!=='')group.readings[i]=v});
-  attempt.appliedValues=values.slice();attempt.appliedAt=Date.now();attempt.status='applied';
+  applied.forEach((v,i)=>{if(v!=='')group.readings[i]=v});
+  attempt.appliedValues=applied.slice();attempt.appliedUnit=rotational?'Pa·s':run.unit;attempt.appliedAt=Date.now();attempt.status='applied';
   group.readingHistory=group.readingHistory||[];group.readingHistory.push({at:Date.now(),source:'photo',photoId,attemptId,values:group.readings.slice()});
   if(resultsComplete(run)){normalizeRotationRun(run);completeRun(run)}
   persistPhotos();render();
@@ -114,11 +123,11 @@ function photoReviewHTML(run,group,photo,a){
   if(a.status==='error')return `<p class="photo-error">${esc(a.error)}</p>`;
   if(a.status!=='review')return '';
   const labels=isAgingMassLoss(run)?AGING_MASS_LABELS:isSoftening(run)?(isSegregation(run,group)?['上部软化点','下部软化点']:['软化点 1 / A','软化点 2 / B']):/旋转[黏粘]度/.test(run.name)?['旋转黏度 1','旋转黏度 2','旋转黏度 3']:/动力[黏粘]度/.test(run.name)?['动力黏度 1','动力黏度 2','动力黏度 3']:['读数 1','读数 2','读数 3'];
-  return `<div class="photo-review"><strong>核对后填入</strong><p class="muted">请核对小数点与标签，保留原始读数。${esc(a.note||'')}${!a.candidates.length?'未识别出读数，可手填或重新识别。':''}</p>${a.reviewValues.map((v,i)=>`<label for="photoValue_${a.id}_${i}">${esc(labels[i]||'读数 '+(i+1))}</label><div class="photo-review-row"><input id="photoValue_${a.id}_${i}" type="number" step="any" value="${esc(v)}" oninput="editPhotoReview('${group.id}','${photo.id}','${a.id}',${i},this.value)"><select aria-label="候选读数" onchange="choosePhotoCandidate('${group.id}','${photo.id}','${a.id}',${i},this)"><option value="">选择候选值</option>${a.candidates.map(c=>`<option value="${esc(c.value)}">${esc(c.label)}：${esc(c.value)}</option>`).join('')}</select></div>`).join('')}<div class="step-actions"><button onclick="applyPhotoReadings('${group.id}','${photo.id}','${a.id}')">核对后填入</button></div></div>`;
+  return `<div class="photo-review"><strong>核对后填入</strong><p class="muted">请核对小数点与标签，保留原始读数。${isRotationalViscosity(run)?'单位按照片核对：mPa.s = mPa·s，除以 1000 后保存为 Pa·s。单位不清楚时请手动选择。':''}${esc(a.note||'')}${!a.candidates.length?'未识别出读数，可手填或重新识别。':''}</p>${a.reviewValues.map((v,i)=>`<label for="photoValue_${a.id}_${i}">${esc(labels[i]||'读数 '+(i+1))}</label><div class="photo-review-row"><input id="photoValue_${a.id}_${i}" type="number" step="any" value="${esc(v)}" oninput="editPhotoReview('${group.id}','${photo.id}','${a.id}',${i},this.value)"><select aria-label="候选读数" onchange="choosePhotoCandidate('${group.id}','${photo.id}','${a.id}',${i},this)"><option value="">选择候选值</option>${a.candidates.map((c,ci)=>`<option value="${ci}">${esc(c.label)}：${esc(c.value)} ${esc(c.unit||'')}</option>`).join('')}</select></div>${isRotationalViscosity(run)?`<label>照片读数单位<select aria-label="照片读数单位" onchange="editPhotoUnit('${group.id}','${photo.id}','${a.id}',${i},this.value)"><option value="">请选择单位</option><option value="mPa·s" ${a.reviewUnits?.[i]==='mPa·s'?'selected':''}>mPa·s（mPa.s，除以 1000）</option><option value="Pa·s" ${a.reviewUnits?.[i]==='Pa·s'?'selected':''}>Pa·s（无需换算）</option></select></label>`:''}`).join('')}<div class="step-actions"><button onclick="applyPhotoReadings('${group.id}','${photo.id}','${a.id}')">核对后填入</button></div></div>`;
 }
 function photoGroupUI(run,group){
   const photos=group.photos||[],can=canCloudRecognize(run),pending=photoPending?.runId===run.id&&photoPending?.groupId===group.id?photoPending.message:'';
-  return `<section class="photo-panel" id="photos_${group.id}"><div class="photo-heading"><strong>仪器照片</strong><small>${photos.length?photos.length+' 张':'可留存原始结果'}</small></div><div class="photo-tools"><button class="secondary" onclick="takeReadingPhoto('${run.id}','${group.id}')">拍照</button><button class="secondary" onclick="chooseReadingPhoto('${run.id}','${group.id}')">相册</button></div>${pending?`<p class="photo-state">${esc(pending)}</p>`:''}${photos.slice().reverse().map((p,i)=>{const a=p.attempts?.[p.attempts.length-1];return `<article class="photo-record"><details class="photo-options"><summary aria-label="照片 ${photos.length-i} 选项">⋮</summary><div><button class="secondary" onclick="rotateExperimentPhoto('${p.id}')">向右旋转 90°</button><button class="secondary" onclick="deleteExperimentPhoto('${p.id}')">删除这张照片</button></div></details><div class="photo-overview"><button class="photo-thumb" aria-label="查看仪器照片 ${photos.length-i}" onclick="openExperimentPhoto('${p.id}')"><img loading="lazy" src="${photoUrl(p.id)}" alt="查看照片" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span hidden>照片不可用</span></button><div><strong>照片 ${photos.length-i}</strong><small>${esc(stamp(p.createdAt))}</small><small>${p.photoSaved?'已保存到相册并关联本组':'已关联本组'}</small></div></div>${photoReviewHTML(run,group,p,a)}${can?`<div class="step-actions"><button class="secondary" ${a?.status==='loading'?'disabled':''} onclick="recognizeSavedPhoto('${run.id}','${group.id}','${p.id}')">${a?.status==='loading'?'识别中':a?.status==='error'?'重试识别（同一照片）':a?'重新识别':'识别这张照片'}</button></div>`:''}${p.attempts?.length?`<details class="photo-audit"><summary>识别与核对记录</summary>${p.attempts.slice().reverse().map(x=>`<div><small>${esc(stamp(x.createdAt))}</small>${x.error?`<p>${esc(x.error)}</p>`:`<p>识别原值：${esc((x.candidates||[]).map(c=>c.label+' '+c.value).join('；')||'暂无')}</p>${x.appliedAt?`<p>核对填入：${esc(readingText(x.appliedValues))}</p>`:'<p>尚未填入</p>'}`}</div>`).join('')}</details>`:''}</article>`}).join('')}${group.readingHistory?.length?`<details class="photo-audit"><summary>读数保存记录</summary><p>当前读数：${esc(readingText(group.readings))}</p>${group.readingHistory.slice().reverse().map(h=>`<p>${esc(stamp(h.at))} · ${h.source==='photo'?'照片核对填入':'手动保存'}<br>${esc(readingText(h.values))}</p>`).join('')}</details>`:''}</section>`;
+  return `<section class="photo-panel" id="photos_${group.id}"><div class="photo-heading"><strong>仪器照片</strong><small>${photos.length?photos.length+' 张':'可留存原始结果'}</small></div><div class="photo-tools"><button class="secondary" onclick="takeReadingPhoto('${run.id}','${group.id}')">拍照</button><button class="secondary" onclick="chooseReadingPhoto('${run.id}','${group.id}')">相册</button></div>${pending?`<p class="photo-state">${esc(pending)}</p>`:''}${photos.slice().reverse().map((p,i)=>{const a=p.attempts?.[p.attempts.length-1];return `<article class="photo-record"><details class="photo-options"><summary aria-label="照片 ${photos.length-i} 选项">⋮</summary><div><button class="secondary" onclick="rotateExperimentPhoto('${p.id}')">向右旋转 90°</button><button class="secondary" onclick="deleteExperimentPhoto('${p.id}')">删除这张照片</button></div></details><div class="photo-overview"><button class="photo-thumb" aria-label="查看仪器照片 ${photos.length-i}" onclick="openExperimentPhoto('${p.id}')"><img loading="lazy" src="${photoUrl(p.id)}" alt="查看照片" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span hidden>照片不可用</span></button><div><strong>照片 ${photos.length-i}</strong><small>${esc(stamp(p.createdAt))}</small><small>${p.photoSaved?'已保存到相册并关联本组':'已关联本组'}</small></div></div>${photoReviewHTML(run,group,p,a)}${can?`<div class="step-actions"><button class="secondary" ${a?.status==='loading'?'disabled':''} onclick="recognizeSavedPhoto('${run.id}','${group.id}','${p.id}')">${a?.status==='loading'?'识别中':a?.status==='error'?'重试识别（同一照片）':a?'重新识别':'识别这张照片'}</button></div>`:''}${p.attempts?.length?`<details class="photo-audit"><summary>识别与核对记录</summary>${p.attempts.slice().reverse().map(x=>`<div><small>${esc(stamp(x.createdAt))}</small>${x.error?`<p>${esc(x.error)}</p>`:`<p>识别原值：${esc((x.candidates||[]).map(c=>c.label+' '+c.value+' '+(c.unit||'')).join('；')||'暂无')}</p>${x.appliedAt?`<p>核对填入：${esc(readingText(x.appliedValues))} ${esc(x.appliedUnit||'')}</p>`:'<p>尚未填入</p>'}`}</div>`).join('')}</details>`:''}</article>`}).join('')}${group.readingHistory?.length?`<details class="photo-audit"><summary>读数保存记录</summary><p>当前读数：${esc(readingText(group.readings))}</p>${group.readingHistory.slice().reverse().map(h=>`<p>${esc(stamp(h.at))} · ${h.source==='photo'?'照片核对填入':'手动保存'}<br>${esc(readingText(h.values))}</p>`).join('')}</details>`:''}</section>`;
 }
 function findExperimentPhoto(id){for(const run of db.runs)for(const group of run.groups||[]){const photo=group.photos?.find(p=>p.id===id);if(photo)return {run,group,photo}}}
 function photoNativeOperation(method,id){
