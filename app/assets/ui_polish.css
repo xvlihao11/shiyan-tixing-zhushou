@@ -565,3 +565,23 @@ body.has-wallpaper,.has-wallpaper .trial-wallpaper{background:#153d59}
   opacity:calc(var(--ui-glass-fill) * var(--ui-slide-glass));
   transition:opacity 220ms cubic-bezier(.22,.75,.25,1)
 }
+
+/* Running tasks: a readable project title and a stable, high-contrast countdown. */
+:is(#root,.section-outgoing) .task-dashboard .task-row-timing .task-row-head{
+  align-items:center;flex-wrap:wrap;gap:8px 12px
+}
+:is(#root,.section-outgoing) .task-dashboard .task-row-timing .task-row-head strong{
+  flex:1 1 130px;font-size:17px;font-weight:650;line-height:1.4;
+  color:#0b3655;text-shadow:0 1px 4px rgba(217,246,255,.5)
+}
+:is(#root,.section-outgoing) .task-dashboard .task-row-timing>p{
+  font-size:16px;font-weight:600;line-height:1.55;margin:9px 0 12px;
+  color:#123e60;overflow-wrap:anywhere;text-shadow:0 1px 4px rgba(217,246,255,.45)
+}
+:is(#root,.section-outgoing) .task-dashboard .task-row-timing .task-clock.timing{
+  display:inline-block;max-width:100%;padding:7px 11px;border-radius:11px;
+  font-size:19px;font-weight:650;line-height:1.35;letter-spacing:.01em;
+  white-space:normal;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;
+  color:#a8f4ff;background:rgba(7,36,59,.94);border:1px solid rgba(112,226,249,.45);
+  text-shadow:0 0 7px rgba(76,217,255,.28);box-shadow:0 2px 7px rgba(3,27,46,.17)
+}
