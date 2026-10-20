@@ -580,7 +580,8 @@ body.has-wallpaper,.has-wallpaper .trial-wallpaper{background:#153d59}
 }
 :is(#root,.section-outgoing) .task-dashboard .task-row-timing>p{
   font-size:13px;font-weight:550;line-height:1.4;margin:3px 0 4px;
-  color:#123e60;overflow-wrap:anywhere;text-shadow:0 1px 4px rgba(217,246,255,.45)
+  color:#168fff;overflow-wrap:anywhere;
+  text-shadow:0 1px 2px rgba(3,32,65,.72),0 0 5px rgba(35,156,255,.42)
 }
 :is(#root,.section-outgoing) .task-dashboard .task-row-timing .task-clock.timing{
   display:inline-block;max-width:100%;padding:3px 7px;border-radius:7px;
