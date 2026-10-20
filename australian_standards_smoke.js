@@ -29,4 +29,15 @@ original.softeningBath='glycerol';assert.strictEqual(ctx.avg(original,original.g
 original.standard='JTG 3410—2025 / T 0606—2011';assert.strictEqual(ctx.avg(original,original.groups[0]),'64.0');
 assert.strictEqual(JSON.stringify(original.groups[0].readings),'["63.49","63.96"]');
 const pen={name:'针入度',standard:'AS 2341.12:2020',groups:[{readings:['19','20','21']}]};assert.strictEqual(ctx.avg(pen,pen.groups[0]),'20');
+const flashTemplate={id:'flash',name:'闪点',standard:'T 0611',temps:'',steps:[{minutes:0}]};
+ctx.db.templates.push(flashTemplate);ctx.ensureMetricStandards();
+assert.strictEqual(flashTemplate.standard,'T 0611, AS 2341.14:2013');
+assert.strictEqual(ctx.metricStandardOptions({name:'闭口闪点'}).length,0);
+const flash={id:'old-flash',sampleId:'s',name:'闪点',standard:'T 0611',unit:'℃',groups:[{name:'试样',readings:['278']}]};
+ctx.db.runs=[flash];assert.strictEqual(ctx.avg(flash,flash.groups[0]),'278');
+assert(ctx.runStandardOptions(flash).includes('AS 2341.14:2013'));
+flash.standard='AS 2341.14:2013';assert.strictEqual(ctx.avg(flash,flash.groups[0]),'280');
+assert(ctx.markdown('s').includes('| ℃ | 280 | 278 |'));assert(ctx.markdown('s').includes('AS 2341.14:2013'));
+assert.strictEqual(flash.groups[0].readings[0],'278');
+flash.standard='T 0611';assert.strictEqual(ctx.avg(flash,flash.groups[0]),'278');
 console.log('Australian option migration, method/bath switching, old records and report passed');
