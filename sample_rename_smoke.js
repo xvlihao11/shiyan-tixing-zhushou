@@ -1,0 +1,20 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const html=fs.readFileSync(__dirname+'/app/assets/index.html','utf8');
+function part(a,b){return html.slice(html.indexOf(a),html.indexOf(b,html.indexOf(a)))}
+const sample={id:'s',name:'旧样品',sampleIds:['旧样品'],sampleCount:1,internalProfileId:'ic1'};
+const run={id:'r',sampleId:'s',steps:[{started:100,minutes:60}],groups:[{id:'g',name:'旧样品',readings:['1','2'],photos:[{id:'photo'}]},{id:'custom',name:'对比样',readings:['3']}]};
+let saves=0;const messages=[];
+const ctx={db:{samples:[sample],runs:[run,{id:'other',sampleId:'other',groups:[{name:'旧样品'}]}]},sampleMenuId:'s',alert:m=>messages.push(m),save:()=>saves++};
+vm.createContext(ctx);vm.runInContext(part('function parseSampleIds(', 'function sampleChoices('),ctx);vm.runInContext(part('function renameSampleRecord(', 'function deleteSample('),ctx);
+const steps=JSON.stringify(run.steps),readings=JSON.stringify(run.groups.map(g=>g.readings));
+assert(ctx.renameSampleRecord('s','新样品'));assert.strictEqual(sample.name,'新样品');assert.strictEqual(sample.sampleIds[0],'新样品');
+assert.strictEqual(run.groups[0].name,'新样品');assert.strictEqual(run.groups[1].name,'对比样');assert.strictEqual(ctx.db.runs[1].groups[0].name,'旧样品');
+assert.strictEqual(sample.id,'s');assert.strictEqual(sample.internalProfileId,'ic1');assert.strictEqual(run.groups[0].id,'g');assert.strictEqual(run.groups[0].photos[0].id,'photo');
+assert.strictEqual(JSON.stringify(run.steps),steps);assert.strictEqual(JSON.stringify(run.groups.map(g=>g.readings)),readings);assert.strictEqual(saves,1);
+const snapshot=JSON.stringify(ctx.db);assert(!ctx.renameSampleRecord('s','  '));assert(!ctx.renameSampleRecord('s','A,B'));assert.strictEqual(JSON.stringify(ctx.db),snapshot);
+sample.name='A,B';sample.sampleIds=['A','B'];sample.sampleCount=2;run.groups[0].name='A';run.groups[1].name='B';
+assert(ctx.renameSampleRecord('s','C,D'));assert.strictEqual(run.groups[0].name,'C');assert.strictEqual(run.groups[1].name,'D');assert.strictEqual(sample.sampleCount,2);
+assert(!ctx.renameSampleRecord('s','C,C'));assert.strictEqual(sample.name,'C,D');
+delete sample.sampleIds;sample.name='旧记录';run.groups[0].name='旧记录';assert(ctx.renameSampleRecord('s','新记录'));assert.strictEqual(run.groups[0].name,'新记录');
+assert(html.includes('editSampleName(\'${s.id}\')'));assert(html.includes('id="editedSampleName"'));
+console.log('sample rename preserves IDs, readings, photos, timers and custom groups passed');
