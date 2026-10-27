@@ -1,11 +1,16 @@
 // BBR stores S and m separately. Never average these different quantities together.
-function isBBR(run){return /\bBBR\b|弯曲梁|弯曲蠕变/i.test(String(run?.name||''))}
+function isBBR(run){return run?.resultKind==='bbr60'||/\bBBR\b|弯曲梁|弯曲蠕变/i.test(String(run?.name||''))}
 const BBR_STANDARD='JTG 3410—2025 / T 0627—2011';
 function ensureBBRTemplate(){
-  if((db.templates||[]).some(isBBR))return;
-  db.templates.push({id:uid(),name:'BBR低温试验',standard:BBR_STANDARD,unit:'S: MPa；m: —',temps:'-6,-12,-18,-24,-30,-36,0',initialReadings:true,steps:[{name:'试件准备',minutes:0,mode:'none'},{name:'低温恒温（按实际规程核对）',minutes:0,mode:'none'},{name:'测定与录入 60 s 结果',minutes:0,mode:'none'}]});
-  localStorage.setItem(KEY,JSON.stringify(db));
+  // A legacy single-metric bending test must not hide the editable paired-result template.
+  let template=(db.templates||[]).find(t=>t.kind!=='heating'&&(t.resultKind==='bbr60'||/^BBR(?:低温)?(?:试验|实验)?$/i.test(String(t.name||'').replace(/\s/g,''))));
+  let changed=false;
+  if(!template){template={id:uid(),resultKind:'bbr60',name:'BBR低温试验',standard:BBR_STANDARD,unit:'S: MPa；m: —',temps:'-6,-12,-18,-24,-30,-36,0',initialReadings:true,steps:[{name:'试件准备',minutes:0,mode:'none'},{name:'低温恒温（按实际规程核对）',minutes:0,mode:'none'},{name:'测定与录入 60 s 结果',minutes:0,mode:'none'}]};db.templates.push(template);changed=true}
+  else if(template.resultKind!=='bbr60'){template.resultKind='bbr60';changed=true}
+  if(changed)localStorage.setItem(KEY,JSON.stringify(db));
+  return template;
 }
+function openBBRTemplate(){const template=ensureBBRTemplate();openTemplateId=template.id;render();get('templateCard_'+template.id)?.scrollIntoView?.({behavior:'smooth',block:'start'})}
 function bbrSpecimenMode(group){return group.bbrMode==='specimens'}
 function bbrValidPair(values){return values.length===2&&values.every(v=>String(v??'').trim()!==''&&Number.isFinite(Number(v)))&&Number(values[0])>0&&Number(values[1])>=0}
 function bbrValues(group){

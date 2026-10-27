@@ -7,8 +7,8 @@ android {
         applicationId 'com.example.asphaltmode1test'
         minSdk 26
         targetSdk 35
-        versionCode 111
-        versionName '5.46 R32 测试'
+        versionCode 112
+        versionName '5.46 R33'
     }
     sourceSets { main { manifest.srcFile 'AndroidManifest.xml'; java.srcDirs = ['src']; res.srcDirs = ['res']; assets.srcDirs = ['assets'] } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }

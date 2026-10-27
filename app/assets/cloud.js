@@ -56,7 +56,7 @@ function attachExperimentPhoto(runId,groupId,camera,recognize=false){
   if(recognize&&!cloudReady())return;
   if(!window.Android?.attachPhotoForGroup)return alert('请在新版安卓软件中添加照片');
   preserveVisibleDraft();photoPending={runId,groupId,message:'等待照片…'};refreshPhotoPanel(runId,groupId);
-  Android.attachPhotoForGroup(runId,groupId,run.name,camera,recognize);
+  Android.attachPhotoForGroup(runId,groupId,isBBR(run)?'BBR低温试验':run.name,camera,recognize);
 }
 window.onNativePhotoEvent=function(event){
   try{
@@ -95,7 +95,7 @@ function recognizeSavedPhoto(runId,groupId,photoId){
   if(photo.attempts?.some(a=>activePhotoAttempts.has(a.id)))return;
   preserveVisibleDraft();const attempt={id:uid(),createdAt:Date.now(),status:'loading'};
   (photo.attempts=photo.attempts||[]).push(attempt);persistPhotos();activePhotoAttempts.add(attempt.id);refreshPhotoPanel(runId,groupId);
-  try{Android.recognizeAttachment(runId,groupId,run.name,photoId,attempt.id)}catch(e){attempt.status='error';attempt.error='识别未能启动，请点击重试';activePhotoAttempts.delete(attempt.id);persistPhotos();refreshPhotoPanel(runId,groupId)}
+  try{Android.recognizeAttachment(runId,groupId,isBBR(run)?'BBR低温试验':run.name,photoId,attempt.id)}catch(e){attempt.status='error';attempt.error='识别未能启动，请点击重试';activePhotoAttempts.delete(attempt.id);persistPhotos();refreshPhotoPanel(runId,groupId)}
 }
 function photoAttempt(groupId,photoId,attemptId){for(const run of db.runs){const group=run.groups?.find(g=>g.id===groupId),photo=group?.photos?.find(p=>p.id===photoId),attempt=photo?.attempts?.find(a=>a.id===attemptId);if(attempt)return {run,group,photo,attempt}}return {}}
 function editPhotoReview(groupId,photoId,attemptId,index,value){const {attempt}=photoAttempt(groupId,photoId,attemptId);if(!attempt)return;attempt.reviewValues[index]=value;persistPhotos()}
