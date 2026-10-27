@@ -7,7 +7,7 @@ const ctx={KEY:'test',db:{templates:[{id:'soft',name:'软化点',standard:'原�
 localStorage:{setItem(){}},isAgingMassLoss:()=>false,isSoftening:r=>r.name.includes('软化点'),isHeating:()=>false,
 isSegregation:()=>false,rotationValueInPa:(r,v)=>Number(v),resultUnit:r=>r.unit,evaluateInternal:()=>({state:'neutral'}),
 exportSamplesFor:()=>ctx.db.samples,localDateKey:()=> '2026-10-20'};
-vm.createContext(ctx);
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/bbr.js','utf8'),ctx);
 vm.runInContext(part('function templateValueOptions(', 'function normalizeRunTemperature('),ctx);
 const prior=JSON.stringify(original);
 vm.runInContext(part('function metricStandardOptions(', 'const esc='),ctx);

@@ -5,7 +5,7 @@ function run(id,minutes){return {id,sampleId:'s',name:id,steps:[{name:'计时',s
 const overdue=run('overdue',.5),timing=run('timing',10),soon=run('soon',2);
 const ctx={db:{samples:[sample],runs:[overdue,timing,soon]},current:r=>r.steps.find(s=>s.started&&!s.done),
 stepFinished:s=>!!s.done,esc:String,localDateKey:()=>sample.date,get:()=>shown?{}:null};
-vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/dashboard.js','utf8'),ctx);
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/bbr.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/dashboard.js','utf8'),ctx);
 function selected(key){const html=ctx.dashboardUI();return html.includes(`aria-selected="true" class="active" onclick="chooseTaskTab('${key}')"`)}
 assert(selected('timing'));
 const html=ctx.dashboardUI();assert(html.indexOf('data-task-id="soon"')<html.indexOf('data-task-id="timing"'));

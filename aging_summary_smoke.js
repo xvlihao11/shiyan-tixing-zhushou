@@ -24,7 +24,7 @@ const ctx={db:{samples:[{id:'s',date:'2026-10-15',name:'试样',sampleCount:1,in
   isSoftening:()=>false,resultUnit:r=>r.unit,evaluateInternal:()=>({state:'neutral'}),
   exportSamplesFor:()=>ctx.db.samples,localDateKey:()=> '2026-10-15',
   internalVerdictHTML:r=>r.text};
-vm.createContext(ctx);vm.runInContext(source,ctx);
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/bbr.js','utf8'),ctx);vm.runInContext(source,ctx);
 
 vm.runInContext(html.match(/function isAgingMassLoss\(r\)\{[^\n]+/)[0],ctx);
 vm.runInContext(part(html,'const AGING_MASS_LABELS=', 'function groupUI('),ctx);

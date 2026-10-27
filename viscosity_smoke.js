@@ -24,7 +24,7 @@ const ctx={db:{samples:[{id:'s',date:'2026-10-15',name:'试样',sampleCount:1,in
   isSoftening:()=>false,resultUnit:r=>r.unit,evaluateInternal:()=>({state:'neutral'}),
   exportSamplesFor:()=>ctx.db.samples,localDateKey:()=> '2026-10-15',
   internalVerdictHTML:r=>r.text};
-vm.createContext(ctx);vm.runInContext(source,ctx);
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/bbr.js','utf8'),ctx);vm.runInContext(source,ctx);
 const original={id:'before',sampleId:'s',templateId:'t1',phase:'原样',name:'60 ℃动力黏度',temp:'60',unit:'Pa·s',groups:[{name:'基质沥青',readings:['100']}]};
 const aged={id:'after',sampleId:'s',templateId:'t2',phase:'RTFOT 老化后',name:'60 ℃动力粘度',temp:'60',unit:'Pa·s',groups:[{name:'基质沥青',readings:['270']}]};
 ctx.db.runs=[original,aged];

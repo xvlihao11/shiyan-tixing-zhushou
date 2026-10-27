@@ -594,3 +594,5 @@ body.has-wallpaper,.has-wallpaper .trial-wallpaper{background:#153d59}
 :is(#root,.section-outgoing) .task-dashboard .task-row-foot button{
   min-height:28px;font-size:11px;line-height:1.3;padding:4px 9px;margin:0
 }
+
+.bbr-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.bbr-pair label{min-width:0}.bbr-specimen{margin-top:10px}.bbr-pair input{font-variant-numeric:tabular-nums}

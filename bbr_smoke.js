@@ -1,0 +1,41 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const html=fs.readFileSync(__dirname+'/app/assets/index.html','utf8');
+function part(a,b){const i=html.indexOf(a),j=html.indexOf(b,i);assert(i>=0&&j>i,a);return html.slice(i,j)}
+const alerts=[],ctx={db:{templates:[],samples:[{id:'s',name:'BBR样品',date:'2026-10-27',sampleCount:1}],runs:[]},window:{},KEY:'test',localStorage:{setItem(){}},get:()=>null,page:'export',render(){},alert:m=>alerts.push(m),confirm:()=>true,uid:()=>Math.random().toString(36).slice(2),isHeating:()=>false,isAgingMassLoss:()=>false,isSegregation:()=>false,isSoftening:()=>false,exportSamplesFor:()=>ctx.db.samples,localDateKey:()=> '2026-10-27',esc:x=>String(x),refreshInternalResults(){},completeRun(r){r.completedAt=1},internalVerdictHTML:()=>'',evaluateInternal:()=>({state:'neutral'}),sampleChoices:s=>[s.name]};
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/bbr.js','utf8'),ctx);
+vm.runInContext(part('function isRotationalViscosity(', 'const AGING_MASS_LABELS='),ctx);
+vm.runInContext(part('const AGING_MASS_LABELS=', 'function groupUI('),ctx);
+vm.runInContext(part('function resultQuantum(', 'function derivedMarkdown('),ctx);
+vm.runInContext(part('function resultsComplete(', 'function normalizeRotationRun('),ctx);
+vm.runInContext(part('const md=x=>','function download('),ctx);
+vm.runInContext(part('function collectResults(', ' function saveResultsDraft('),ctx);
+vm.runInContext(part('function groupUI(', 'function setGroupNameChoice('),ctx);
+vm.runInContext(fs.readFileSync(__dirname+'/app/assets/cloud.js','utf8'),ctx);
+ctx.ensureBBRTemplate();ctx.ensureBBRTemplate();assert.strictEqual(ctx.db.templates.length,1);
+assert.strictEqual(ctx.db.templates[0].standard,'JTG 3410—2025 / T 0627—2011');
+assert(ctx.isBBR(ctx.db.templates[0]));assert(ctx.canCloudRecognize(ctx.db.templates[0]));
+const run={id:'r',sampleId:'s',name:'BBR低温试验',standard:ctx.db.templates[0].standard,temp:'-12',unit:'S: MPa；m: —',groups:[{id:'g',name:'BBR样品',readings:['245.84','0.316'],notes:''}],steps:[]};ctx.db.runs=[run];
+const g=run.groups[0];assert(ctx.resultsComplete(run));assert.strictEqual(ctx.avg(run,g),'S(60 s) = 245.8 MPa；m(60 s) = 0.32');
+assert.strictEqual(g.readings[1],'0.316');assert.notStrictEqual(ctx.avg(run,g),'123.078');
+const form=ctx.groupUI(run,g,0);assert(form.includes('S(60 s) · MPa'));assert(form.includes('m(60 s) · 无量纲'));assert(!form.includes('remove-reading'));assert(!form.includes('＋增加读数'));
+let report=ctx.markdown('s');assert(report.includes('BBR低温试验 · S(60 s) | MPa | 245.8 |'));assert(report.includes('BBR低温试验 · m(60 s) | — | 0.32 |'));assert(report.includes('-12 ℃；加载 60 s'));assert(report.includes('0.316'));
+g.readings=['245',''];assert(!ctx.resultsComplete(run));assert.strictEqual(ctx.avg(run,g),'—');g.readings=['0','.3'];assert(!ctx.resultsComplete(run));
+g.bbrMode='specimens';g.readings=['100.04','.305','200.06','.315','300.08','.325'];
+assert(ctx.resultsComplete(run));assert.strictEqual(ctx.bbrValues(g).s,'200.1');assert.strictEqual(ctx.bbrValues(g).m,'0.31');
+g.readings[5]='';assert(!ctx.resultsComplete(run));
+for(const label of ['S(60 s)','S(60)','S60s','劲度(60s)'])assert.strictEqual(ctx.bbrCandidateSlot({label}),0,label);
+for(const label of ['m(60 s)','m(60)','m值(60s)'])assert.strictEqual(ctx.bbrCandidateSlot({label}),1,label);
+for(const label of ['S(30s)','m(240s)','S','当前温度60s'])assert.strictEqual(ctx.bbrCandidateSlot({label}),-1,label);
+assert.strictEqual(ctx.bbrCandidateSlot({label:'S(30)',timeSeconds:60}),-1);
+function recognize(readings,mode='summary',existing=['','']){
+ g.bbrMode=mode;g.readings=existing;const a={id:'a',status:'loading'};g.photos=[{id:'p',attempts:[a]}];
+ ctx.window.onNativePhotoEvent({type:'result',runId:'r',groupId:'g',payload:{photoId:'p',attemptId:'a',readings}});return a;
+}
+let a=recognize([{label:'S(30s)',value:'999',unit:'MPa'},{label:'m(120s)',value:'.2'},{label:'S(60s)',value:'245.84',unit:'MPa',timeSeconds:60},{label:'m(60s)',value:'0.316',unit:'—',timeSeconds:60}]);
+assert.strictEqual(a.reviewValues[0],'245.84');assert.strictEqual(a.reviewValues[1],'0.316');assert(ctx.photoReviewHTML(run,g,g.photos[0],a).includes('BBR S 照片单位'));
+ctx.applyPhotoReadings('g','p','a');assert.deepStrictEqual(Array.from(g.readings),['245.84','0.316']);assert(run.completedAt);
+delete run.completedAt;
+a=recognize([{label:'S(60s)',value:'245840',unit:'kPa'},{label:'m(60s)',value:'0.316',unit:'—'}],'specimens',['200','.3','','','300','.33']);assert.strictEqual(a.bbrSpecimenIndex,1);ctx.applyPhotoReadings('g','p','a');assert.strictEqual(g.readings[2],'245.84');assert.strictEqual(g.readings[3],'0.316');assert.strictEqual(g.readings[0],'200');assert(ctx.resultsComplete(run));
+a=recognize([{label:'S(60s)',value:'200',unit:''},{label:'m(60s)',value:'0.3',unit:'—'}]);ctx.applyPhotoReadings('g','p','a');assert.deepStrictEqual(g.readings,['','']);assert(alerts.length);ctx.editPhotoUnit('g','p','a',0,'MPa');ctx.applyPhotoReadings('g','p','a');assert.strictEqual(g.readings[0],'200');
+a=recognize([{label:'S(60s)',value:'200',unit:'MPa'},{label:'S(60s)',value:'300',unit:'MPa'}]);assert.strictEqual(a.reviewValues[0],'');
+console.log('BBR separate S/m input, completion, three-specimen means, export and 60s photo mapping passed');

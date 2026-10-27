@@ -6,7 +6,7 @@ const ctx={db:{samples:[{id:'s',name:'EME2',date:'2026-10-20'}],runs:[]},
   isSegregation:(r,g)=>r.name.includes('软化点')&&g.calculationMode==='segregation',
   rotationValueInPa:(r,v)=>Number(v),isHeating:()=>false,resultUnit:r=>r.unit,
   exportSamplesFor:()=>ctx.db.samples,localDateKey:()=> '2026-10-20',evaluateInternal:()=>({state:'neutral'})};
-vm.createContext(ctx);
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/bbr.js','utf8'),ctx);
 vm.runInContext(part('function resultQuantum(', 'function derivedMarkdown('),ctx);
 vm.runInContext(part('const md=x=>','function download('),ctx);
 const group={name:'EME2',readings:['63.49','63.96']};

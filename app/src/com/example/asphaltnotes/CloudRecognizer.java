@@ -32,6 +32,9 @@ final class CloudRecognizer {
         +"保持原始小数位，不计算平均值，不修约；模糊或看不清的数字不要猜测。"
         +"只输出合法JSON对象，格式为{\"readings\":[{\"label\":\"软化点A\",\"value\":\"83.78\",\"unit\":\"℃\"}],\"note\":\"\"}。"
         +"value只能是数字字符串；如果没有可信读数就让readings为空数组。不要输出Markdown。";
+      if(experiment.matches("(?i).*BBR.*")||experiment.contains("弯曲梁")||experiment.contains("弯曲蠕变")){
+        prompt="你是沥青 BBR 低温试验原始结果提取器。只提取明确对应加载时间 60 s 的 S（蠕变劲度，单位 MPa 或 kPa）与 m（无量纲）。若有多行时间数据，必须定位 60.0 s 那一行，忽略 8、15、30、120、180、240 s 的 S 与 m。若报告直接标明 S(60)、S(60s)、m(60)、m(60s)，视为 60 s。只输出当前单个试件或明确的最终汇总结果；多试件无法唯一对应时不要混合配对，不要自行平均。看不清时间或单位时不要猜测。保留原始数值小数位，不修约，不做单位换算，m 不转换为百分数。输出合法 JSON：{\"readings\":[{\"label\":\"S(60 s)\",\"value\":\"245.8\",\"unit\":\"MPa\",\"timeSeconds\":60},{\"label\":\"m(60 s)\",\"value\":\"0.312\",\"unit\":\"—\",\"timeSeconds\":60}],\"note\":\"\"}。只输出实际可见的可信结果，没有结果时 readings 为空。value 用数字字符串（小于1的数字带前导0）；不输出Markdown。";
+      }
       JSONObject request=new JSONObject()
         .put("model",MODEL).put("temperature",0.1).put("max_output_tokens",1024)
         .put("input",new JSONArray().put(new JSONObject().put("role","user")
@@ -70,7 +73,7 @@ final class CloudRecognizer {
       if(raw!=null)for(int i=0;i<raw.length();i++){
         JSONObject item=raw.optJSONObject(i);if(item==null)continue;
         String label=item.optString("label","").trim(),value=item.optString("value","").trim();
-        if(!label.isEmpty()&&value.matches("[+-]?\\d+(?:\\.\\d+)?"))readings.put(new JSONObject().put("label",label).put("value",value).put("unit",item.optString("unit","")));
+        if(!label.isEmpty()&&value.matches("[+-]?\\d+(?:\\.\\d+)?"))readings.put(new JSONObject().put("label",label).put("value",value).put("unit",item.optString("unit","")).put("timeSeconds",item.opt("timeSeconds")));
       }
       valid.put("readings",readings).put("note",parsed.optString("note",""));
       return valid;

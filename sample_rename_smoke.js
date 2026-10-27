@@ -5,7 +5,7 @@ const sample={id:'s',name:'旧样品',sampleIds:['旧样品'],sampleCount:1,inte
 const run={id:'r',sampleId:'s',steps:[{started:100,minutes:60}],groups:[{id:'g',name:'旧样品',readings:['1','2'],photos:[{id:'photo'}]},{id:'custom',name:'对比样',readings:['3']}]};
 let saves=0;const messages=[];
 const ctx={db:{samples:[sample],runs:[run,{id:'other',sampleId:'other',groups:[{name:'旧样品'}]}]},sampleMenuId:'s',alert:m=>messages.push(m),save:()=>saves++};
-vm.createContext(ctx);vm.runInContext(part('function parseSampleIds(', 'function sampleChoices('),ctx);vm.runInContext(part('function renameSampleRecord(', 'function deleteSample('),ctx);
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/bbr.js','utf8'),ctx);vm.runInContext(part('function parseSampleIds(', 'function sampleChoices('),ctx);vm.runInContext(part('function renameSampleRecord(', 'function deleteSample('),ctx);
 const steps=JSON.stringify(run.steps),readings=JSON.stringify(run.groups.map(g=>g.readings));
 assert(ctx.renameSampleRecord('s','新样品'));assert.strictEqual(sample.name,'新样品');assert.strictEqual(sample.sampleIds[0],'新样品');
 assert.strictEqual(run.groups[0].name,'新样品');assert.strictEqual(run.groups[1].name,'对比样');assert.strictEqual(ctx.db.runs[1].groups[0].name,'旧样品');

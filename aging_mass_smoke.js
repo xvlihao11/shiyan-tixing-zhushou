@@ -4,7 +4,7 @@ function part(start,end){const a=html.indexOf(start),b=html.indexOf(end,a);asser
 const ctx={db:{samples:[{id:'s',name:'EME2',date:'2026-10-20'}],runs:[]},
   exportSamplesFor:()=>ctx.db.samples,isHeating:()=>false,isSegregation:()=>false,isSoftening:()=>false,
   localDateKey:()=> '2026-10-20',evaluateInternal:()=>({state:'neutral'}),rotationUnitLabel:r=>r.unit};
-vm.createContext(ctx);
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/bbr.js','utf8'),ctx);
 vm.runInContext(html.match(/function isAgingMassLoss\(r\)\{[^\n]+/)[0],ctx);
 vm.runInContext(part('const AGING_MASS_LABELS=', 'function groupUI('),ctx);
 vm.runInContext(part('function resultQuantum(', 'function derivedMarkdown('),ctx);

@@ -5,7 +5,7 @@ let alerts=[];
 const ctx={db:{runs:[]},window:{},KEY:'test',localStorage:{setItem(){}},get:()=>null,page:'export',render(){},
   alert:m=>alerts.push(m),confirm:()=>true,isAgingMassLoss:()=>false,isSoftening:()=>false,
   resultsComplete:()=>false,completeRun(){},console};
-vm.createContext(ctx);
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/bbr.js','utf8'),ctx);
 vm.runInContext(part('function isRotationalViscosity(', 'const AGING_MASS_LABELS='),ctx);
 vm.runInContext(part('function normalizeRotationRun(', ' function completeRun('),ctx);
 vm.runInContext(fs.readFileSync(__dirname+'/app/assets/cloud.js','utf8'),ctx);

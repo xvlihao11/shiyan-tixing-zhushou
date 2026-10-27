@@ -7,7 +7,7 @@ const source=[
 ].join('\n');
 const db={runs:[{temp:'60 ℃'},{temp:'60.0'},{temp:''}]};
 const ctx={db,KEY:'smoke',localStorage:{setItem:()=>{}},String,Number,Set};
-vm.createContext(ctx);vm.runInContext(source,ctx);
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/bbr.js','utf8'),ctx);vm.runInContext(source,ctx);
 assert.deepStrictEqual(db.runs.map(r=>r.temp),['60','60','']);
 const one={name:'动力粘度',standard:'T 0620',temps:'60℃'};
 assert.strictEqual(ctx.defaultRunOptions(one).temp,'60');
