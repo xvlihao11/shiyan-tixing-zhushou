@@ -10,7 +10,6 @@ function ensureBBRTemplate(){
   if(changed)localStorage.setItem(KEY,JSON.stringify(db));
   return template;
 }
-function openBBRTemplate(){const template=ensureBBRTemplate();openTemplateId=template.id;render();get('templateCard_'+template.id)?.scrollIntoView?.({behavior:'smooth',block:'start'})}
 function bbrSpecimenMode(group){return group.bbrMode==='specimens'}
 function bbrValidPair(values){return values.length===2&&values.every(v=>String(v??'').trim()!==''&&Number.isFinite(Number(v)))&&Number(values[0])>0&&Number(values[1])>=0}
 function bbrValues(group){

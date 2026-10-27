@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.asphaltmode1test" android:versionCode="112" android:versionName="5.46 R33">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.asphaltmode1test" android:versionCode="113" android:versionName="5.46 R34">
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
