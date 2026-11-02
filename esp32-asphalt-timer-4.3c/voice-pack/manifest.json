@@ -1,0 +1,101 @@
+{
+  "voice": "5ba3c68f-7d4d-4e42-be1c-90690664d00c",
+  "items": [
+    {
+      "project": "135 ℃旋转黏度",
+      "step": "恒定读数",
+      "file": "28d57288cfbeb82b.pcm",
+      "seconds": 4.55
+    },
+    {
+      "project": "135 ℃旋转黏度",
+      "step": "模具预热",
+      "file": "72855bfe337cb024.pcm",
+      "seconds": 4.56
+    },
+    {
+      "project": "135 ℃旋转黏度",
+      "step": "沥青保温",
+      "file": "76aab9628aacb822.pcm",
+      "seconds": 4.16
+    },
+    {
+      "project": "60 ℃动力黏度",
+      "step": "沥青预热",
+      "file": "b0c995f3e482f896.pcm",
+      "seconds": 4.57
+    },
+    {
+      "project": "60 ℃动力黏度",
+      "step": "油浴",
+      "file": "f9e720149969333f.pcm",
+      "seconds": 4.4
+    },
+    {
+      "project": "60 ℃动力黏度",
+      "step": "烘箱预热",
+      "file": "44735d2cc0254fe9.pcm",
+      "seconds": 4.56
+    },
+    {
+      "project": "RTFOT老化",
+      "step": "保温",
+      "file": "504d567b40813211.pcm",
+      "seconds": 3.2
+    },
+    {
+      "project": "RTFOT老化",
+      "step": "老化",
+      "file": "102343cbe8dde20c.pcm",
+      "seconds": 3.76
+    },
+    {
+      "project": "延度",
+      "step": "室温冷却",
+      "file": "b3d97bc6867b7490.pcm",
+      "seconds": 2.32
+    },
+    {
+      "project": "延度",
+      "step": "水浴",
+      "file": "76fd84a129533429.pcm",
+      "seconds": 3.2
+    },
+    {
+      "project": "新实验类型",
+      "step": "新步骤",
+      "file": "a034b91bd355a121.pcm",
+      "seconds": 4.56
+    },
+    {
+      "project": "样品加热 30 分",
+      "step": "加热",
+      "file": "edcd2fd246f396d9.pcm",
+      "seconds": 4.48
+    },
+    {
+      "project": "软化点",
+      "step": "水浴",
+      "file": "8eddc46fb42b0849.pcm",
+      "seconds": 2.32
+    },
+    {
+      "project": "软化点",
+      "step": "沥青冷却",
+      "file": "63011aa6b35fa1d7.pcm",
+      "seconds": 2.48
+    },
+    {
+      "project": "针入度",
+      "step": "室温冷却",
+      "file": "e512214c872b87ce.pcm",
+      "seconds": 3.52
+    },
+    {
+      "project": "针入度",
+      "step": "水浴",
+      "file": "edda2b0d7f7eb71f.pcm",
+      "seconds": 2.8
+    }
+  ]
+}
