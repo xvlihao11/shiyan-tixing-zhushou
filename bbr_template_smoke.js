@@ -4,7 +4,7 @@ function part(a,b){const i=html.indexOf(a),j=html.indexOf(b,i);assert(i>=0&&j>i,
 const legacy={templates:[{id:'old',name:'低温弯曲蠕变劲度 S',standard:'原标准',steps:[{name:'旧步骤',minutes:3,mode:'none'}]}],samples:[{id:'s',name:'试样',sampleCount:1}],runs:[{id:'oldrun',name:'已有试验',steps:[{started:123,minutes:60}],groups:[{readings:['123']}]}],projectGroups:[]};
 let stored=JSON.stringify(legacy),renders=0;const fields=new Map();
 const ctx={localStorage:{getItem:()=>stored,setItem:(k,v)=>stored=v},window:{},document:{getElementById:id=>fields.get(id)},projectGroupEditor:()=>'',alert(){},confirm:()=>true};
-vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/bbr.js','utf8'),ctx);
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/mscr.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/bbr.js','utf8'),ctx);
 // Execute the actual startup sequence against an existing user's database.
 vm.runInContext(part('const KEY=', 'const esc=')+part('function templateValueOptions(', 'function normalizeRunTemperature('),ctx);
 vm.runInContext("function render(){renderCalls=(typeof renderCalls==='undefined'?0:renderCalls)+1};const get=id=>document.getElementById(id);const esc=x=>String(x??'');",ctx);

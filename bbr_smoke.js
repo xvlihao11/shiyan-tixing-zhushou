@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const html=fs.readFileSync(__dirname+'/app/assets/index.html','utf8');
 function part(a,b){const i=html.indexOf(a),j=html.indexOf(b,i);assert(i>=0&&j>i,a);return html.slice(i,j)}
 const alerts=[],ctx={db:{templates:[],samples:[{id:'s',name:'BBR样品',date:'2026-10-27',sampleCount:1}],runs:[]},window:{},KEY:'test',localStorage:{setItem(){}},get:()=>null,page:'export',render(){},alert:m=>alerts.push(m),confirm:()=>true,uid:()=>Math.random().toString(36).slice(2),isHeating:()=>false,isAgingMassLoss:()=>false,isSegregation:()=>false,isSoftening:()=>false,exportSamplesFor:()=>ctx.db.samples,localDateKey:()=> '2026-10-27',esc:x=>String(x),refreshInternalResults(){},completeRun(r){r.completedAt=1},internalVerdictHTML:()=>'',evaluateInternal:()=>({state:'neutral'}),sampleChoices:s=>[s.name]};
-vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/bbr.js','utf8'),ctx);
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/mscr.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/app/assets/bbr.js','utf8'),ctx);
 vm.runInContext(part('function isRotationalViscosity(', 'const AGING_MASS_LABELS='),ctx);
 vm.runInContext(part('const AGING_MASS_LABELS=', 'function groupUI('),ctx);
 vm.runInContext(part('function resultQuantum(', 'function derivedMarkdown('),ctx);
