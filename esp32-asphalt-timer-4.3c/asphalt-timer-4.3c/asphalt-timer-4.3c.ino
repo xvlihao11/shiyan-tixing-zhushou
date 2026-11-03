@@ -2437,13 +2437,16 @@ void loop() {
   if(page==Page::Transfer && tick-last_draw_ms>=1000)redraw=true;
   static uint32_t last_touch_poll=0;
   const bool quick_record=page==Page::Stopwatch&&!screen_locked&&!backlight_off;
-  if(tick-last_touch_poll>=uint32_t(quick_record?10:screen_locked?20:40)) {
+  const uint32_t irq_snapshot=touch_irq_count;
+  if(irq_snapshot!=last_touch_irq_count || tick-last_touch_poll>=uint32_t(quick_record?10:20)) {
   last_touch_poll=tick;
+  last_touch_irq_count=irq_snapshot;
   touch_gt911_point_t point=touch_gt911_read_point(2);
   const uint64_t touch_at=esp_timer_get_time();
   const bool record_enabled=quick_record&&alert_run<0&&confirm_kind==ConfirmKind::None;
   if(record_press.observe(point.fresh,point.cnt,point.cnt?point.x[0]:0,point.cnt?point.y[0]:0,record_enabled))stopwatch_primary_at(touch_at);
-  if(point.fresh||!quick_record) {
+  // A poll without a new GT911 frame is neither a press nor a release.
+  if(point.fresh) {
   const bool pressed=point.cnt>0;
   if (screen_locked || backlight_off) {
     // Interrupts, taps, long contact and pocket movement never directly wake.
@@ -2471,7 +2474,7 @@ void loop() {
       if(touch_samples<255)++touch_samples;
     } else if (touch_down) {
       const uint32_t duration=tick-touch_begin_ms;
-      if (!wake_only && touch_samples>=2 && duration>=60) {
+      if (!wake_only && touch_samples>=1 && duration>=10) {
         const int dx=touch_last_x-touch_start_x,dy=touch_last_y-touch_start_y;
         if(touch_start_y<420 && abs(dy)>=55 && abs(dy)>abs(dx)) handle_swipe(dy);
         else if(abs(dx)<30 && abs(dy)<30 && duration<=1500)handle_touch(touch_start_x,touch_start_y);
@@ -2480,7 +2483,7 @@ void loop() {
     touch_down=pressed && point.cnt==1;
   }
 
-  } // On the stopwatch, a missing frame is not a release.
+  } // Missing controller frames must not cancel a tap or an unlock swipe.
   } // Touch cadence is independent of the network/audio service loop.
 
   if(record_flash_until&&int32_t(tick-record_flash_until)>=0){record_flash_until=0;redraw=true;}
