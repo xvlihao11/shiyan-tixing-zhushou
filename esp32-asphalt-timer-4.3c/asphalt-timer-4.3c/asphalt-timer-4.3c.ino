@@ -2518,7 +2518,7 @@ void loop() {
     sound_save_pending = false;
     if (!sound_settings_save()) notice("闹铃音量保存失败");
   }
-  const uint32_t refresh_interval = page==Page::Stopwatch && stopwatch.running && !screen_locked ? 100 : live_display_needed() ? 1000 : 60000;
+  const uint32_t refresh_interval = page==Page::Stopwatch && stopwatch.running && !screen_locked ? 50 : live_display_needed() ? 1000 : 60000;
   if (!backlight_off && (redraw || tick - last_draw_ms >= refresh_interval)) draw_all();
   delay(voice_playing || voice_upload_active ? 0 : record_tone_remaining>0 ? 1 : quick_record ? 2 : transfer_active() ? 2 : screen_locked ? 20 : 40);
 }
