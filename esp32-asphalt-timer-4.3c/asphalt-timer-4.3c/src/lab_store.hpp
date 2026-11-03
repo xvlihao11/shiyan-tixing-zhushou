@@ -24,7 +24,7 @@ bool lab_load();
 bool lab_save();
 uint32_t lab_generation();
 int lab_add_sample(const char* name, int64_t now);
-int lab_add_run(int sample_index, Run run);
+int lab_add_run(int sample_index, Run run, int64_t created_ms);
 bool lab_remove_sample(int sample_index);
 bool lab_remove_run(int run_index);
 int lab_find_sample(uint32_t id);

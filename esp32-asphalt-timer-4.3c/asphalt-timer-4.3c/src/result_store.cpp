@@ -1,4 +1,5 @@
 #include "result_store.hpp"
+#include "report_table.hpp"
 #include "lab_store.hpp"
 #include "tf_records.hpp"
 #include "flash_guard.hpp"
@@ -106,6 +107,48 @@ void results_collect_deleted() {
   if(dirty){nvs_commit(handle);screen_after_flash();}
 }
 uint32_t results_free_entries(){nvs_stats_t stats{};return nvs_get_stats("timer_nvs",&stats)==ESP_OK?stats.free_entries:0;}
+bool results_archive_safe() {
+  if (!ready) return false;
+  for (int i=0;i<kMaxRuns;++i) if (blocked[i] || (cache[i].run_id && !valid(cache[i]))) return false;
+  return true;
+}
+bool results_archive_copy(uint32_t run_id, ResultRecord& out) {
+  for (int i=0;i<kMaxRuns;++i) if (!blocked[i] && cache[i].run_id == run_id) { out=cache[i]; return valid(out); }
+  return false;
+}
+bool results_archive_validate(const ResultRecord& value) {return valid(value);}
+bool results_stage_import(const ResultRecord& value) {
+  if (!ready || !valid(value) || lab_find_run(value.run_id)>=0) return false;
+  int slot=-1;
+  for (int i=0;i<kMaxRuns;++i) if (!blocked[i] && cache[i].run_id==value.run_id)
+    return !memcmp(&cache[i],&value,sizeof value);
+  for (int i=0;i<kMaxRuns;++i) if (!blocked[i] && !cache[i].run_id) {slot=i;break;}
+  if (slot<0) return false;
+  Stored record{}; record.magic=0x31525341; record.version=1; record.size=sizeof(ResultRecord); record.data=value;
+  record.checksum=crc(&record.data,sizeof record.data);
+  uint8_t packed[sizeof(Stored)]={}; const size_t size=encode(record,packed);
+  const uint32_t reserve=(sizeof(LabData)+31)/32+96;
+  if (results_free_entries()<(size+31)/32+2+reserve) return false;
+  char key[8]; snprintf(key,sizeof key,"r%d",slot);
+  screen_before_flash(); esp_err_t err=nvs_set_blob(handle,key,packed,size);
+  if (err==ESP_OK) err=nvs_commit(handle); screen_after_flash();
+  if (err!=ESP_OK) return false;
+  Stored checked{};
+  if (!read(slot,checked) || memcmp(&checked.data,&value,sizeof value)) return false;
+  cache[slot]=checked.data; return true;
+}
+void results_discard_staged(const uint32_t* ids,int count) {
+  if (!ready) return;
+  bool changed=false;
+  for (int i=0;i<kMaxRuns;++i) for (int j=0;j<count;++j)
+    if (!blocked[i] && cache[i].run_id==ids[j] && lab_find_run(ids[j])<0) {
+      if (!changed) screen_before_flash(); changed=true;
+      char key[8]; snprintf(key,sizeof key,"r%d",i);
+      esp_err_t err=nvs_erase_key(handle,key);
+      if (err==ESP_OK || err==ESP_ERR_NVS_NOT_FOUND) memset(&cache[i],0,sizeof cache[i]);
+    }
+  if (changed) {nvs_commit(handle);screen_after_flash();}
+}
 const ResultRecord* results_for(const Run& run) {
   for(int i=0;i<kMaxRuns;++i)if(!blocked[i]&&cache[i].run_id==run.id)return &cache[i];
   for(int i=0;i<kMaxRuns;++i)if(!blocked[i]&&(!cache[i].run_id||lab_find_run(cache[i].run_id)<0)) {
@@ -141,6 +184,20 @@ int result_baselines(const Run& run,uint32_t* ids,int size) {
     if(b&&compare_conditions(*r,*b)){if(count<size)ids[count]=base.id;++count;}
   }
   return count;
+}
+bool results_has_dependents(uint32_t base_id) {
+  const int index=lab_find_run(base_id);
+  if(index<0 || lab.runs[index].phase!=AgingPhase::Original)return false;
+  for(int i=0;i<lab.run_count;++i) {
+    const Run& aged=lab.runs[i];
+    if(aged.sample_id!=lab.runs[index].sample_id||aged.phase==AgingPhase::Original)continue;
+    const ResultRecord* value=results_for(aged);
+    if(!value||value->metric==Metric::Mass||value->metric==Metric::Other)continue;
+    if(value->baseline_id==base_id)return true;
+    uint32_t ids[kMaxRuns]={};const int n=result_baselines(aged,ids,kMaxRuns);
+    for(int j=0;j<n&&j<kMaxRuns;++j)if(ids[j]==base_id)return true;
+  }
+  return false;
 }
 const Run* result_baseline(const Run& run,char* reason,size_t size) {
   auto fail=[&](const char* why)->const Run*{snprintf(reason,size,"%s",why);return nullptr;};
@@ -197,56 +254,34 @@ String result_json(const Run& run,const ResultRecord* supplied) {
   return out+"]}\n";
 }
 String result_markdown(uint32_t selected,bool times) {
-  String out;out.reserve(16384);out="# 沥青试验记录\n\n时间采用北京时间；完成时间以人工确认为准。\n\n";
+  String out="# 沥青实验数据\n\n",comparisons,appendix;int sample_count=0;
   for(int sample=0;sample<lab.sample_count;++sample) {
     bool header=false;
     for(int i=0;i<lab.run_count;++i) {
       const Run& run=lab.runs[i];if(!chosen(selected,i)||run.sample_id!=lab.samples[sample].id)continue;
       const ResultRecord* r=results_for(run);if(!r)continue;
-      if(!header){out+="## 样品："+md(lab.samples[sample].name)+"\n\n建立："+when(lab.samples[sample].created)+"\n\n";header=true;}
-      out+="### "+String(phase_label(run.phase))+" · "+md(run.name)+"（项目 "+String(run.id)+"）\n\n";
-      out+="采用规范："+md(r->standard)+"；温度："+(r->temperature[0]?md(r->temperature):String("未填写"))+" ℃；输入单位："+input_unit_label(*r)+"。\n\n";
-      if(r->metric==Metric::Softening)out+=String(result_rule_label(*r))+"；离析取原始上、下部读数绝对差。\n\n";
-      if(r->metric==Metric::Mass)out+="质量变化 =（老化后总质量 − 老化前总质量）÷（老化前总质量 − 空容器质量）×100% ＋ 修正值；正号为增重，负号为减重。\n\n";
-      out+="| 组别 | 模式 | 原始读数 | 结果 | 单位 |\n|---|---|---|---:|---|\n";
-      for(int g=0;g<r->group_count;++g) {
-        const auto& group=r->groups[g];auto result=calculate_result(*r,g);
-        out+="| "+md(group.name)+" | "+(group.segregation?String("离析"):String("普通"))+" | ";
-        const char* mass[]={"空容器","老化前总质量","老化后总质量"};
-        for(int j=0;j<group.count;++j) {
-          if(j)out+="；";
-          if(r->metric==Metric::Mass)out+=String(mass[j])+"：";
-          else if(group.segregation)out+=j?"下部：":"上部：";
-          out+=group.readings[j][0]?md(group.readings[j]):String("未填");
-        }
-        if(r->metric==Metric::Mass)out+="；修正："+(group.correction[0]?md(group.correction):String("0"))+" %";
-        out+=" | "+(result.valid?String(result.text):String("未完成"))+" | "+String(result.unit)+" |\n";
-      }
-      out+="\n";
+      if(!header){out+="## 样品："+report_cell(lab.samples[sample].name)+"\n\n"+report_columns();header=true;++sample_count;}
+      out+=report_rows(lab.samples[sample].name,run,*r);
       if(run.phase!=AgingPhase::Original&&r->metric!=Metric::Mass&&r->metric!=Metric::Other) {
-        char reason[96];const Run* base=result_baseline(run,reason,sizeof reason);
-        const int base_index=base?lab_find_run(base->id):-1;
-        if(base_index>=0&&chosen(selected,base_index)) {
-          for(int g=0;g<r->group_count;++g) {
-            auto derived=result_derived(run,g);
-            if(derived.valid)out+="- "+md(r->groups[g].name)+" · "+(r->metric==Metric::Softening?String("软化点变化（老化后−老化前）"):
-              r->metric==Metric::Penetration?String("针入度比（老化后÷老化前×100%）"):String("黏度比（老化后÷老化前）"))+"：**"+derived.text+" "+derived.unit+"**，对照项目 "+String(base->id)+"。\n";
-            else out+="- 老化前后计算未完成："+String(derived.reason)+"。\n";
-          }
-        }else out+="- 未附老化前后结果："+(base?String("未选择对照项目"):String(reason))+"。\n";
-        out+="\n";
-      }
-      if(r->notes[0])out+="备注："+md(r->notes)+"\n\n";
-      if(times) {
-        out+="| 步骤 | 计划分钟 | 开始 | 计划到点 | 确认完成 | 跳过 |\n|---|---:|---|---|---|---|\n";
-        for(int j=0;j<run.count;++j) {
-          const auto& step=run.steps[j];out+="| "+md(step.name)+" | "+String(step.minutes)+" | "+when(step.started)+" | "+when(step.started&&step.minutes>0?due_ms(step):0)+" | "+when(step.done)+" | "+when(step.skipped)+" |\n";
+        char reason[96];const Run* base=result_baseline(run,reason,sizeof reason);const int bi=base?lab_find_run(base->id):-1;
+        for(int g=0;g<r->group_count;++g) {
+          const auto value=result_derived(run,g);
+          const bool included=bi>=0&&chosen(selected,bi);
+          String formula=included?report_formula(*r,g,*results_for(*base)):String(base?"未选择对照项目":reason);
+          comparisons+="| "+report_name(run,*r,g)+" · "+report_cell(lab.samples[sample].name)+" · "+report_comparison_name(*r)+" | "+(included&&value.valid?String(value.text)+" "+value.unit:String("未计算"))+" | "+report_cell(formula.c_str())+" |\n";
         }
-        out+="\n";
       }
-      if(out.length()>100000)return "";
+      if(r->notes[0])appendix+="- "+report_cell(lab.samples[sample].name)+" · "+report_cell(run.name)+"："+report_cell(r->notes)+"\n";
+      if(times){appendix+="\n### 步骤记录："+report_cell(lab.samples[sample].name)+" · "+report_cell(run.name)+"\n\n| 步骤 | 计划分钟 | 开始 | 计划到点 | 确认完成 | 跳过 |\n| --- | ---: | --- | --- | --- | --- |\n";
+        for(int j=0;j<run.count;++j){const auto& step=run.steps[j];appendix+="| "+report_cell(step.name)+" | "+String(step.minutes)+" | "+when(step.started)+" | "+when(step.started&&step.minutes>0?due_ms(step):0)+" | "+when(step.done)+" | "+when(step.skipped)+" |\n";}}
+      if(out.length()+comparisons.length()+appendix.length()>100000)return "";
     }
+    if(header)out+="\n";
   }
+  char date[24];time_t now=time(nullptr);struct tm t{};localtime_r(&now,&t);strftime(date,sizeof date,"%Y-%m-%d",&t);
+  out+="日期："+String(date)+" · 样品数量："+String(sample_count)+"\n";
+  if(comparisons.length())out+="\n### 老化前后计算结果\n\n| 项目 | 结果 | 算式 |\n| --- | ---: | --- |\n"+comparisons;
+  if(appendix.length())out+="\n### 补充记录\n\n"+appendix;
   return out;
 }
 bool result_export(uint32_t selected,bool times,String& path) {

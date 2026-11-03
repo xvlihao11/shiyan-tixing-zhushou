@@ -2,6 +2,8 @@
 #include "flash_guard.hpp"
 #include "tf_records.hpp"
 #include "result_store.hpp"
+#include "lab_codec.hpp"
+#include "run_age.hpp"
 
 #include <Arduino.h>
 #include <nvs.h>
@@ -13,6 +15,7 @@ LabData lab{};
 namespace {
 constexpr uint32_t kMagic = 0x3342414c;  // LAB3
 constexpr uint16_t kVersion = 3;
+constexpr uint16_t kPackedVersion = 4;
 constexpr char kPartition[] = "timer_nvs";
 constexpr char kNamespace[] = "lab4c";
 constexpr char kSlot0[] = "lab3_0";
@@ -32,6 +35,7 @@ struct Record {
 };
 
 static Record slot0{}, slot1{};  // Never allocate full records on the task stack.
+static uint8_t packed_record[sizeof(Record)]{};
 static uint32_t generation = 0;
 static nvs_handle_t handle = 0;
 static bool storage_ok = false;
@@ -110,9 +114,18 @@ bool record_exists(const char* key) {
 }
 
 bool read_slot(const char* key, Record& record) {
-  size_t size = sizeof record;
-  if (nvs_get_blob(handle, key, &record, &size) != ESP_OK || size != sizeof record) return false;
-  return record.header.magic == kMagic && record.header.version == kVersion &&
+  size_t size = sizeof packed_record;
+  if (nvs_get_blob(handle, key, packed_record, &size) != ESP_OK || size < sizeof(Header)) return false;
+  memcpy(&record.header, packed_record, sizeof(Header));
+  if (record.header.magic != kMagic || record.header.size != sizeof(LabData)) return false;
+  if (record.header.version == kVersion) {
+    if (size != sizeof record) return false;
+    memcpy(&record.data, packed_record + sizeof(Header), sizeof record.data);
+  } else if (record.header.version == kPackedVersion) {
+    if (!lab_unpack(packed_record + sizeof(Header), size - sizeof(Header),
+                    reinterpret_cast<uint8_t*>(&record.data), sizeof record.data)) return false;
+  } else return false;
+  return
          record.header.size == sizeof(LabData) &&
          record.data.sample_count <= kMaxSamples && record.data.run_count <= kMaxRuns && valid_runs(record.data) &&
          record.header.checksum == checksum(reinterpret_cast<const uint8_t*>(&record.data), sizeof(LabData));
@@ -169,9 +182,17 @@ bool lab_save() {
   record.header = {kMagic, kVersion, sizeof(LabData), next_generation,
                    checksum(reinterpret_cast<const uint8_t*>(&lab), sizeof lab)};
   memcpy(&record.data,&lab,sizeof lab);
+  const size_t compressed = lab_pack(reinterpret_cast<const uint8_t*>(&record.data), sizeof record.data,
+                                     packed_record + sizeof(Header), sizeof packed_record - sizeof(Header));
+  size_t write_size = sizeof record;
+  if (compressed && compressed + sizeof(Header) < sizeof record) {
+    record.header.version = kPackedVersion;
+    memcpy(packed_record, &record.header, sizeof(Header));
+    write_size = sizeof(Header) + compressed;
+  } else memcpy(packed_record, &record, sizeof record);
   screen_before_flash();
   const esp_err_t write = nvs_set_blob(handle, (next_generation & 1) ? kSlot1 : kSlot0,
-                                       &record, sizeof record);
+                                       packed_record, write_size);
   if (write != ESP_OK) {
     screen_after_flash();
     Serial.printf("lab NVS write failed: %s\n", esp_err_to_name(write));
@@ -209,11 +230,13 @@ int lab_add_sample(const char* name, int64_t now) {
   return -1;
 }
 
-int lab_add_run(int sample_index, Run run) {
+int lab_add_run(int sample_index, Run run, int64_t created_ms) {
   if (!storage_ok || sample_index < 0 || sample_index >= lab.sample_count ||
       lab.run_count >= kMaxRuns || run.count < 1) return -1;
   const Sample& sample = lab.samples[sample_index];
-  run.id = lab.next_id++;
+  run.id = lab.next_id;
+  if(!run_age_set(run.id,created_ms))return -1;
+  ++lab.next_id;
   run.sample_id = sample.id;
   strncpy(run.sample, sample.name, sizeof(run.sample) - 1);
   run.sample[sizeof(run.sample) - 1] = 0;

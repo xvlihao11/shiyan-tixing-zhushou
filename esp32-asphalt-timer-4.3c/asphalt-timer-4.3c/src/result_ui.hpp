@@ -235,11 +235,11 @@ void prepare_transfer_qr() {
 }
 void draw_transfer() {
   title_bar("手机传输",transfer_active()?"热点已开启":"热点已关闭");
-  if(!transfer_active()){label(24,110,"开启热点后可在手机选择试验数据",CYAN);button(24,180,450,65,"重新开启传输热点",Action::TransferStart,0,GREEN);nav();return;}
+  if(!transfer_active()){label(24,110,transfer_report_only()?"开启热点后下载历史报告":"开启热点后可在手机选择试验数据",CYAN);button(24,180,450,65,"重新开启传输热点",Action::TransferStart,0,GREEN);nav();return;}
   label(22,83,"1. 手机连接以下 Wi-Fi",CYAN);label(22,121,transfer_ssid());
   char text[80];snprintf(text,sizeof text,"密码：%s",transfer_password());label(22,160,text);
-  label(22,204,"2. 手机勾选样品和试验项目",CYAN);label(22,242,"自动弹出，或点登录网络提示");
-  snprintf(text,sizeof text,"可选 %u 项；已完成 %u 次下载",transfer_scope_count(),transfer_downloads());label_fitted(22,286,450,text,MUTED);
+  label(22,204,transfer_report_only()?"2. 手机点击下载历史报告":"2. 手机勾选样品和试验项目",CYAN);label(22,242,"自动弹出，或点登录网络提示");
+  snprintf(text,sizeof text,transfer_report_only()?"历史项目；已完成 %u 次下载":"可选 %u 项；已完成 %u 次下载",transfer_report_only()?transfer_downloads():transfer_scope_count(),transfer_downloads());label_fitted(22,286,450,text,MUTED);
   label(22,326,transfer_address().c_str(),MUTED);
   button(22,368,250,45,"关闭热点",Action::TransferStop,0,RED);
   button(494,365,288,48,qr_wifi?"切换下载二维码":"切换连接二维码",Action::TransferQR);
@@ -375,7 +375,7 @@ bool handle_result_action(Action action,int arg) {
       if(!transfer_start_scope(shared_scope)){notice("热点开启失败");break;}
       qr_wifi=true;prepare_transfer_qr();page=Page::Transfer;break;
     case Action::TransferStart:
-      if(!(exported_path.length()?transfer_start(exported_path,shared_scope):transfer_start_scope(shared_scope)))notice("开启失败，请返回重新选择");else {qr_wifi=true;prepare_transfer_qr();}break;
+      if(!(transfer_report_only()?transfer_start_report(exported_path):exported_path.length()?transfer_start(exported_path,shared_scope):transfer_start_scope(shared_scope)))notice("开启失败，请返回重新选择");else {qr_wifi=true;prepare_transfer_qr();}break;
     case Action::TransferStop:transfer_stop();break;
     case Action::TransferQR:qr_wifi=!qr_wifi;prepare_transfer_qr();break;
     default:return false;

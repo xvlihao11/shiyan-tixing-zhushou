@@ -2,6 +2,8 @@
 #include <Arduino.h>
 bool transfer_start(const String& path,uint32_t scope=0);
 bool transfer_start_scope(uint32_t scope);
+bool transfer_start_report(const String& path);
+bool transfer_report_only();
 uint32_t transfer_scope_count();
 String transfer_report_path();
 void transfer_stop();

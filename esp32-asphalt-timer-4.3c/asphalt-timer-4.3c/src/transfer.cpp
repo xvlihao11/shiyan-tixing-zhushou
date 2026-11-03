@@ -12,7 +12,7 @@ namespace {
 WiFiServer server(80);WiFiClient client;File file;
 DNSServer dns;
 uint32_t allowed_ids[kMaxRuns]={};int allowed_count=0;
-bool active=false,responding=false,download=false;
+bool active=false,responding=false,download=false,report_only=false;
 String path,request,body,header;
 char ssid[32]={},password[16]={};
 size_t position=0,header_position=0;uint32_t last_activity=0,client_time=0,downloads=0,sent=0,length=0;
@@ -35,7 +35,7 @@ void respond(bool is_download,int code=200) {
     file=SD_MMC.open(path,FILE_READ);
     if(!file){download=false;code=404;}
   }
-  if(!download)body=code==200?result_mobile_html(current_scope()):
+  if(!download)body=code==200?(report_only?String("<html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><body><h2>试验历史记录</h2><p><a href='/download'>下载历史项目报告</a></p></body></html>"):result_mobile_html(current_scope())):
     code==302?"<html><meta charset=utf-8><body>正在进入试验记录选择页。<a href='http://192.168.4.1/'>点击进入</a></body></html>":
     code==400?"<html><meta charset=utf-8><body><p>请选择本次共享范围内的试验项目。</p><a href='/'>返回选择</a></body></html>":
     code==500?"<html><meta charset=utf-8><body><p>报告生成失败，请检查板子上的TF卡。</p><a href='/'>返回选择</a></body></html>":"Not found";
@@ -73,16 +73,16 @@ void route_export(const String& target) {
   respond(true);
 }
 }
-bool transfer_start(const String& report,uint32_t scope) {
-  if(!scope)scope=lab.run_count==32?0xffffffffu:(uint32_t(1)<<lab.run_count)-1;
-  if(!scope)return false;
+bool transfer_start_internal(const String& report,uint32_t scope,bool only) {
+  if(!only&&!scope)scope=lab.run_count==32?0xffffffffu:(uint32_t(1)<<lab.run_count)-1;
+  if((!only&&!scope)||(only&&!report.length()))return false;
   uint32_t size=0;
   if(report.length()) {
     File check=SD_MMC.open(report,FILE_READ);
     if(!check||check.isDirectory()||check.size()>100000){check.close();return false;}
     size=check.size();check.close();
   }
-  if(active) {close_client();remember_scope(scope);path=report;length=size;sent=downloads=0;last_activity=millis();return true;}
+  if(active) {close_client();remember_scope(scope);path=report;report_only=only;length=size;sent=downloads=0;last_activity=millis();return true;}
   transfer_stop();remember_scope(scope);length=size;
   snprintf(ssid,sizeof ssid,"Asphalt-43C-%04X",unsigned(ESP.getEfuseMac()&0xffff));
   snprintf(password,sizeof password,"%08u",unsigned(esp_random()%100000000));
@@ -90,10 +90,13 @@ bool transfer_start(const String& report,uint32_t scope) {
   if(!WiFi.softAP(ssid,password,1,false,2)){WiFi.mode(WIFI_OFF);return false;}
   dns.setTTL(0);
   if(!dns.start(53,"*",WiFi.softAPIP())){WiFi.softAPdisconnect(true);WiFi.mode(WIFI_OFF);return false;}
-  server.begin();path=report;active=true;downloads=sent=0;last_activity=millis();
+  server.begin();path=report;report_only=only;active=true;downloads=sent=0;last_activity=millis();
   Serial.printf("transfer_start=1 ip=%s heap=%u\n",WiFi.softAPIP().toString().c_str(),ESP.getFreeHeap());
   return true;
 }
+bool transfer_start(const String& report,uint32_t scope){return transfer_start_internal(report,scope,false);}
+bool transfer_start_report(const String& report){return transfer_start_internal(report,0,true);}
+bool transfer_report_only(){return report_only;}
 bool transfer_start_scope(uint32_t scope){return transfer_start("",scope);}
 uint32_t transfer_scope_count(){uint32_t n=0,mask=current_scope();while(mask){n+=mask&1;mask>>=1;}return n;}
 String transfer_report_path(){return path;}
@@ -122,7 +125,7 @@ void transfer_tick() {
       if(request.length()>4096){close_client();return;}
       if(request.endsWith("\r\n\r\n")) {
         const int end=request.indexOf(' ',4);const String target=end>4?request.substring(4,end):String("");
-        if(request.startsWith("GET /export?"))route_export(target);
+        if(request.startsWith("GET /export?")&&!report_only)route_export(target);
         else if(request.startsWith("GET /download HTTP/1.")&&path.length())respond(true);
         else respond(false,request.startsWith("GET / HTTP/1.")?200:302);
         break;

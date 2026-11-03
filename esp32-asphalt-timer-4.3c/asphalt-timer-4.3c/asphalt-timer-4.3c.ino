@@ -11,6 +11,9 @@
 #include "src/speaker_microphone/speaker_microphone.h"
 #include "src/font_draw.hpp"
 #include "src/lab_store.hpp"
+#include "src/lab_codec.hpp"
+#include "src/run_age.hpp"
+#include "src/history.hpp"
 #include "src/pocket_guard.hpp"
 #include "src/tf_records.hpp"
 #include "src/result_store.hpp"
@@ -31,7 +34,7 @@ uint16_t* frame_b = nullptr;
 
 enum class Page : uint8_t {
   Dashboard, Samples, Sample, Run, NewSample, PickProject, NewProject,
-  Templates, TemplateEdit, EditText, Clock, Settings, SampleDates, SampleRecords, StepRecord, Results, ResultOptions, NumericPad, ResultSummary, ExportSelect, Transfer, ResultStandards, PageJump, ExportDates, ExportSamples
+  Templates, TemplateEdit, EditText, Clock, Settings, SampleDates, SampleRecords, StepRecord, Results, ResultOptions, NumericPad, ResultSummary, ExportSelect, Transfer, ResultStandards, PageJump, ExportDates, ExportSamples, HistoryList, HistoryDetail, HistoryDate, HistoryField
 };
 enum class Action : uint8_t {
   None, Home, Samples, Back, Next, Prev, OpenSample, OpenRun, NewSample,
@@ -49,8 +52,11 @@ enum class Action : uint8_t {
   NumberKey, NumberConfirm, ResultMetric, ResultUnit, ResultMode, ResultRule, ResultBaseline,
   ResultSummary, SummaryPage, SummaryOpen, ExportOpen, ExportToggle, ExportScope, ExportTimes, ExportGenerate,
   TransferStart, TransferStop, TransferQR, MobileShare, StandardChoose, StandardCustom, JumpOpen, JumpKey, JumpGo,
-  ExportDateOpen, ExportSampleOpen, ExportDateToggle, ExportSampleToggle, ExportRoot
+  ExportDateOpen, ExportSampleOpen, ExportDateToggle, ExportSampleToggle, ExportRoot,
+  HistoryOpen, HistoryItemOpen, HistoryRestore, HistoryExport, HistoryDateOpen, HistoryDateKey, HistoryDateApply, HistoryAll, HistoryFieldOpen, HistoryExportRow
 };
+// Archive, NVS and TF operations may nest; leave headroom for their call chains.
+SET_LOOP_TASK_STACK_SIZE(20480);
 struct Hit { int x, y, w, h; Action action; int arg; };
 Hit hits[90];
 int hit_count = 0;
@@ -62,7 +68,7 @@ int jump_total=1;
 char jump_entry[4]={};
 int task_tab = 0;  // 0: active timers, 1: due timers.
 int pending_run = -1, pending_step = -1;
-enum class ConfirmKind : uint8_t { None, Skip, Early, DeleteSample, DeleteRun, DeleteTemplate, DeleteStep };
+enum class ConfirmKind : uint8_t { None, Skip, Early, DeleteSample, DeleteRun, DeleteTemplate, DeleteStep, RestoreHistory };
 ConfirmKind confirm_kind = ConfirmKind::None;
 char entry[32] = {};
 int project_minutes = 30;
@@ -96,11 +102,9 @@ int touch_last_x = 0, touch_last_y = 0;
 esp_codec_dev_handle_t play_device = nullptr;
 float battery_voltage = 0;
 uint16_t battery_raw = 0;
-int battery_percent = 0;
 bool battery_valid = false;
-bool battery_settling = false;
-uint32_t battery_settle_ms = 0;
-float battery_settle_voltage = 0;
+// Coarse voltage bands only; this is not a measured state of charge.
+int8_t battery_band = -1;
 int brightness = 55;  // Percent visible brightness, inverted by the board controller.
 int alarm_volume = 80;
 nvs_handle_t sound_settings_handle = 0;
@@ -112,10 +116,29 @@ uint32_t alert_end_ms = 0, alarm_sound_end_ms = 0, next_beep_ms = 0;
 bool voice_sd_ready = false, voice_attempted = false, voice_playing = false, voice_failed = false;
 File voice_file;
 size_t voice_remaining = 0;
+File voice_upload_file;
+bool voice_upload_active = false;
+uint32_t voice_upload_size = 0, voice_upload_received = 0, voice_upload_expected_crc = 0;
+uint32_t voice_upload_crc = 0xffffffffU, voice_upload_last_ms = 0;
+uint32_t voice_upload_last_ack_ms = 0;
+char voice_upload_path[40] = {}, voice_upload_temp[44] = {};
 int clock_field = 0;
 datetime_t clock_edit{};
 char toast[80] = {};
 uint32_t toast_until_ms = 0;
+struct HistoryRow {uint32_t id;bool archived;char sample[32];char project[24];int64_t created;};
+HistoryRow history_rows[4]{};
+uint32_t history_selected_id=0;
+uint32_t history_shared_id=0;
+bool history_selected_archived=false;
+int history_date_filter=0;
+char history_date_entry[9]={};
+Sample history_sample{};Run history_run{};ResultRecord history_result{};
+bool history_has_result=false;
+bool history_has_comparison=false;
+uint32_t history_comparison_baseline=0;
+ComputedResult history_comparisons[kResultGroups]{};
+int history_field=0;
 
 void screen_before_flash() {
   screen_hidden_for_flash = display_ready && !backlight_off;
@@ -257,18 +280,16 @@ void button(int x, int y, int w, int h, const char* title, Action action,
 }
 
 // Main 1-cell Li-ion battery: Waveshare's 10-bit ADC, 3.3 V reference, 3:1 divider.
-// Voltage-derived state of charge is approximate, especially during charging/load.
-int battery_percent_for_voltage(float volts) {
-  const float voltage[] = {3.00f,3.30f,3.50f,3.60f,3.70f,3.80f,3.90f,4.00f,4.10f,4.20f};
-  const int percent[] = {0,5,10,20,40,60,75,85,95,100};
-  if (volts <= voltage[0]) return 0;
-  for (int i=1;i<10;++i) {
-    if (volts <= voltage[i]) {
-      const float fraction=(volts-voltage[i-1])/(voltage[i]-voltage[i-1]);
-      return constrain(static_cast<int>(lroundf(percent[i-1]+fraction*(percent[i]-percent[i-1]))),0,100);
-    }
+// Voltage bands are only a rough guide, especially during charging or heavy load.
+int8_t battery_band_for_voltage(float voltage, int8_t previous) {
+  constexpr float cuts[] = {3.55f, 3.75f, 3.95f};
+  int8_t band = previous < 0 ? 0 : previous;
+  if (previous < 0) while (band < 3 && voltage >= cuts[band]) ++band;
+  else {
+    while (band < 3 && voltage >= cuts[band] + 0.05f) ++band;
+    while (band > 0 && voltage < cuts[band - 1] - 0.05f) --band;
   }
-  return 100;
+  return band;
 }
 
 void poll_battery(uint32_t tick) {
@@ -283,54 +304,35 @@ void poll_battery(uint32_t tick) {
   const float voltage=raw*(3.0f*3.3f/1023.0f);
   if (result!=ESP_OK || raw>1023 || voltage<2.5f || voltage>4.35f) {
     sum=0; count=0;
-    if (++failures>=3 && battery_valid) { battery_valid=false; redraw=true; }
+    if (++failures>=3 && battery_valid) { battery_valid=false; battery_band=-1; redraw=true; }
     return;
   }
   failures=0;
   sum+=raw;
   if (++count<10) return;
-  const bool was_settling=battery_settling;
   const bool had_value=battery_valid;
-  const int previous_percent=battery_percent;
   const float previous_voltage=battery_voltage;
   battery_raw=static_cast<uint16_t>((sum+count/2)/count);
   const float measured=(sum/static_cast<float>(count))*(3.0f*3.3f/1023.0f);
   battery_voltage=battery_valid ? 0.75f*battery_voltage+0.25f*measured : measured;
-  if (had_value && fabsf(measured-previous_voltage)>=0.08f && !battery_settling) {
-    battery_settling=true; battery_settle_ms=tick; battery_settle_voltage=measured;
-  }
-  if (battery_settling) {
-    if (fabsf(measured-battery_settle_voltage)>=0.025f) {
-      battery_settle_voltage=measured; battery_settle_ms=tick;
-    }
-    if (static_cast<uint32_t>(tick-battery_settle_ms)>=15000) battery_settling=false;
-  }
-  if (!battery_settling) battery_percent=battery_percent_for_voltage(battery_voltage);
   battery_valid=true;
+  const int8_t previous_band=battery_band;
+  battery_band=battery_band_for_voltage(battery_voltage,battery_band);
+  if (battery_band==0 && previous_band>0) notice("电池电压偏低，请及时充电");
   sum=0; count=0;
-  if (!backlight_off && (!had_value || was_settling!=battery_settling || battery_percent!=previous_percent || fabsf(battery_voltage-previous_voltage)>=0.01f)) redraw=true;
+  if (!backlight_off && (!had_value || fabsf(battery_voltage-previous_voltage)>=0.01f)) redraw=true;
   // ADC updates never wake the screen.
 }
 
 void draw_battery() {
-  constexpr int x=684, y=12, w=35, h=18;
-  const uint16_t color=!battery_valid ? MUTED : battery_percent<=15 ? RED : battery_percent<=30 ? ORANGE : GREEN;
   box(674,4,126,56,CARD);
-  box(x,y,w,h,color);
-  box(x+2,y+2,w-4,h-4,CARD);
-  box(x+w,y+5,3,8,color);
-  if (battery_valid) box(x+4,y+4,(w-8)*battery_percent/100,h-8,color);
-  char level[12], volts[16];
-  if (battery_valid) {
-    if (battery_settling) snprintf(level,sizeof level,"...");
-    else snprintf(level,sizeof level,"~%d%%",battery_percent);
-    snprintf(volts,sizeof volts,"%.2fV",battery_voltage);
-  } else {
-    snprintf(level,sizeof level,"--%%");
-    snprintf(volts,sizeof volts,"--.--V");
-  }
-  label(728,8,level,color);
-  label(692,35,volts,MUTED);
+  char volts[24];
+  if(battery_valid)snprintf(volts,sizeof volts,"电池 %.2fV",battery_voltage);
+  else snprintf(volts,sizeof volts,"电池 --.--V");
+  label_fitted(680,7,116,volts,battery_valid?CYAN:MUTED);
+  const char* bands[]={"估计 请充电","估计 偏低","估计 一般","估计 充足"};
+  label_fitted(680,35,116,battery_valid?bands[battery_band]:"估计 未知",
+               !battery_valid?MUTED:battery_band==0?ORANGE:battery_band==1?ORANGE:CYAN);
 }
 
 void title_bar(const char* title, const char* subtitle = nullptr) {
@@ -343,7 +345,7 @@ void title_bar(const char* title, const char* subtitle = nullptr) {
 void nav() {
   box(0, 424, W, 56, CARD);
   button(8, 428, 150, 48, "任务", Action::Home, 0, (page == Page::Dashboard || page == Page::ExportSelect || page == Page::ExportDates || page == Page::ExportSamples || page == Page::Transfer) ? CYAN : BLUE);
-  button(166, 428, 150, 48, "样品", Action::Samples, 0, (page == Page::Samples || page == Page::SampleDates || page == Page::Sample || page == Page::SampleRecords || page == Page::StepRecord || page == Page::Results || page == Page::ResultOptions || page == Page::ResultStandards || page == Page::NumericPad || page == Page::ResultSummary) ? CYAN : BLUE);
+  button(166, 428, 150, 48, "样品", Action::Samples, 0, (page == Page::Samples || page == Page::SampleDates || page == Page::Sample || page == Page::SampleRecords || page == Page::StepRecord || page == Page::Results || page == Page::ResultOptions || page == Page::ResultStandards || page == Page::NumericPad || page == Page::ResultSummary || page == Page::HistoryList || page == Page::HistoryDetail || page == Page::HistoryDate || page == Page::HistoryField) ? CYAN : BLUE);
   button(324, 428, 150, 48, "试验类型", Action::OpenTemplates, 0,
          page == Page::Templates || page == Page::TemplateEdit ? CYAN : BLUE);
   button(482, 428, 150, 48, "设置", Action::OpenSettings, 0,
@@ -467,20 +469,21 @@ uint64_t voice_key(const char* project, const char* step) {
 }
 
 bool voice_start(const Run& run, const Step& step) {
-  if (!voice_sd_ready) return false;
+  if (!voice_sd_ready) { Serial.println("VOICE_PLAY no_card"); return false; }
   char path[40];
   snprintf(path, sizeof path, "/voice/%016llx.pcm", static_cast<unsigned long long>(voice_key(run.name, step.name)));
   voice_file = SD_MMC.open(path, FILE_READ);
-  if (!voice_file) return false;
+  if (!voice_file) { Serial.printf("VOICE_PLAY missing %s\n", path); return false; }
   const size_t size = voice_file.size();
   if (size == 0 || size > 44100 * 4 * 48 / 10 || (size % 4) != 0) {
-    voice_file.close();
+    Serial.printf("VOICE_PLAY invalid_size %u\n", unsigned(size)); voice_file.close();
     return false;
   }
-  if (alarm_volume == 0) { voice_file.close(); return true; }
-  if (!audio_open(alarm_volume)) { voice_file.close(); return false; }
+  if (alarm_volume == 0) { Serial.println("VOICE_PLAY muted"); voice_file.close(); return true; }
+  if (!audio_open(alarm_volume)) { Serial.println("VOICE_PLAY audio_open_failed"); voice_file.close(); return false; }
   voice_remaining = size;
   voice_playing = true;
+  Serial.printf("VOICE_PLAY started %s bytes=%u volume=%d\n", path, unsigned(size), alarm_volume);
   return true;
 }
 
@@ -490,6 +493,7 @@ void voice_stop() {
   voice_remaining = 0;
   voice_file.close();
   audio_close();
+  Serial.println("VOICE_PLAY stopped");
 }
 
 void voice_tick() {
@@ -679,10 +683,69 @@ int samples_on_date(int key) {
   return count;
 }
 
+bool history_is_past(const Run& run,int64_t now) {
+  const int64_t created=run_age_get(run.id);
+  return clock_ok&&history_age_reached(created,now,run_age_hold_until(run.id),3)&&!history_run_busy(run,now);
+}
+void history_auto_tick(uint32_t tick) {
+  static uint32_t last_check=0;
+  if(tick-last_check<60000)return;
+  last_check=tick;
+  if(!clock_ok||!screen_locked||!records_ok()||alert_run>=0||voice_playing||voice_upload_active||
+     transfer_active()||confirm_kind!=ConfirmKind::None||lab_save_pending||type_save_pending)return;
+  if(page==Page::ExportSelect||page==Page::ExportDates||page==Page::ExportSamples||page==Page::Transfer)return;
+  const int64_t now=now_ms();
+  for(int i=0;i<lab.run_count;++i)for(int j=0;j<lab.runs[i].count;++j) {
+    const Step& s=lab.runs[i].steps[j];
+    if(s.started&&!s.done&&!s.skipped && s.minutes>0 && due_ms(s)>now && due_ms(s)-now<60000)return;
+  }
+  uint32_t protected_run=0;
+  if(selected_run>=0&&selected_run<lab.run_count&&(page==Page::Run||page==Page::StepRecord||page==Page::Results||page==Page::ResultOptions||page==Page::ResultStandards||page==Page::NumericPad))protected_run=lab.runs[selected_run].id;
+  if(page==Page::HistoryDetail&&!history_selected_archived)protected_run=history_selected_id;
+  const int i=history_find_candidate(now,7,0,protected_run);
+  if(i>=0) {
+    const Run& run=lab.runs[i];
+    const uint32_t sample_id=selected_sample>=0&&selected_sample<lab.sample_count?lab.samples[selected_sample].id:0;
+    const uint32_t run_id=selected_run>=0&&selected_run<lab.run_count?lab.runs[selected_run].id:0;
+    const uint32_t moved=run.id;
+    const char* error=history_archive_run(i,now);
+    selected_sample=sample_id?lab_find_sample(sample_id):-1;
+    selected_run=run_id?lab_find_run(run_id):-1;
+    if(error)Serial.printf("HISTORY_AUTO failed id=%u %s\n",moved,error);
+    else {Serial.printf("HISTORY_AUTO archived id=%u\n",moved);redraw=true;}
+    return; // One project at a time, keeping timer and UI service responsive.
+  }
+}
+bool history_make_room(bool sample_slot,uint32_t keep_sample) {
+  if(!clock_ok||!records_ok()||alert_run>=0||voice_playing||voice_upload_active||transfer_active())return false;
+  const int64_t now=now_ms();
+  for(int i=0;i<lab.run_count;++i)for(int j=0;j<lab.runs[i].count;++j){const Step& s=lab.runs[i].steps[j];
+    if(s.started&&!s.done&&!s.skipped&&s.minutes>0&&due_ms(s)>now&&due_ms(s)-now<60000)return false;}
+  for(int attempts=0;attempts<kMaxRuns;++attempts) {
+    if(sample_slot?lab.sample_count<kMaxSamples:lab.run_count<kMaxRuns)return true;
+    const int index=history_find_candidate(now,3);
+    if(index<0)return false;
+    const uint32_t current_sample=selected_sample>=0&&selected_sample<lab.sample_count?lab.samples[selected_sample].id:0;
+    const uint32_t current_run=selected_run>=0&&selected_run<lab.run_count?lab.runs[selected_run].id:0;
+    const bool keep=keep_sample&&lab.runs[index].sample_id==keep_sample;
+    const char* error=history_archive_run(index,now,keep);
+    selected_sample=current_sample?lab_find_sample(current_sample):-1;
+    selected_run=current_run?lab_find_run(current_run):-1;
+    if(error){Serial.printf("HISTORY_CAPACITY failed %s\n",error);return false;}
+    Serial.println("HISTORY_CAPACITY archived");
+  }
+  return sample_slot?lab.sample_count<kMaxSamples:lab.run_count<kMaxRuns;
+}
+int history_date_key(int64_t ms) {
+  if(ms<=0)return 0;
+  time_t sec=ms/1000;struct tm t{};localtime_r(&sec,&t);
+  return (t.tm_year+1900)*10000+(t.tm_mon+1)*100+t.tm_mday;
+}
+
 void draw_sample_dates() {
   char clock_text[40]; format_clock(clock_text,sizeof clock_text);
   title_bar("样品记录",clock_ok ? clock_text : "时钟未设置");
-  label(22,89,"按建立日期分类",MUTED);
+  button(18,75,220,47,"往期历史",Action::HistoryOpen,0,BLUE);
   button(575,75,207,47,"+ 建立样品",Action::NewSample,0,GREEN);
   int keys[kMaxSamples]={};
   const int count=sample_dates(keys);
@@ -702,7 +765,7 @@ void draw_sample_dates() {
     hit(18,y,600,62,Action::OpenDate,key);
   }
   if (!count) label(28,180,"还没有样品，先建立样品编号",MUTED);
-  page_control(list_page,max(1,(count+3)/4),300,75,260,46);
+  page_control(list_page,max(1,(count+3)/4),250,75,310,46);
   nav();
 }
 
@@ -746,6 +809,7 @@ void draw_sample() {
   for (int i = lab.run_count - 1; i >= 0; --i) {
     const Run& run = lab.runs[i];
     if (run.sample_id != sample.id) continue;
+    if (history_is_past(run,now_ms())) continue;
     if (found++ < start) continue;
     if (shown >= 4) continue;
     const int y = 132 + shown++ * 70;
@@ -761,8 +825,96 @@ void draw_sample() {
     button(635, y + 11, 130, 41, "步骤", Action::OpenRun, i, GREEN);
     hit(18, y, 450, 63, Action::OpenRun, i);
   }
-  if (!found) label(28, 181, "样品尚无实验项目", MUTED);
+  if (!found) label(28, 181, lab_runs_for_sample(sample.id)?"项目已移入往期历史":"样品尚无实验项目", MUTED);
   page_control(list_page,max(1,(found+3)/4),588,75,194,46);
+  nav();
+}
+
+void draw_history_list() {
+  title_bar("往期历史",history_date_filter?"按项目建立日期":"板内和TF卡项目");
+  button(18,75,168,46,"选择日期",Action::HistoryDateOpen,0,BLUE);
+  button(196,75,125,46,"全部",Action::HistoryAll,0,BLUE);
+  const int64_t now=now_ms();int live=0;
+  for(int i=0;i<lab.run_count;++i)if(history_is_past(lab.runs[i],now) &&
+     (!history_date_filter||history_date_key(run_age_get(lab.runs[i].id))==history_date_filter))++live;
+  const int archived=history_list(0,nullptr,0,history_date_filter);
+  const int count=live+max(0,archived);
+  list_page=constrain(list_page,0,max(0,(count-1)/4));
+  const int start=list_page*4;int ordinal=0,shown=0;memset(history_rows,0,sizeof history_rows);
+  for(int i=lab.run_count-1;i>=0&&shown<4;--i) {
+    const Run& run=lab.runs[i];int64_t created=run_age_get(run.id);
+    if(!history_is_past(run,now)||(history_date_filter&&history_date_key(created)!=history_date_filter))continue;
+    if(ordinal++<start)continue;
+    HistoryRow& row=history_rows[shown++];row.id=run.id;row.created=created;row.archived=false;
+    snprintf(row.sample,sizeof row.sample,"%s",run.sample);snprintf(row.project,sizeof row.project,"%s",run.name);
+  }
+  if(shown<4&&archived>0) {
+    HistoryItem items[4]{};int offset=max(0,start-live);
+    const int got=history_list(offset,items,4-shown,history_date_filter);
+    const int available=got<0?0:min(4-shown,max(0,got-offset));
+    for(int i=0;i<available;++i){HistoryRow& row=history_rows[shown++];row.id=items[i].id;row.created=items[i].created;row.archived=true;
+      memcpy(row.sample,items[i].sample,sizeof row.sample);memcpy(row.project,items[i].project,sizeof row.project);}
+  }
+  for(int i=0;i<shown;++i){const HistoryRow& row=history_rows[i];const int y=132+i*69;box(18,y,764,62,BLUE);
+    char text[90],date[32];record_time(row.created,date,sizeof date);date[10]=0;
+    snprintf(text,sizeof text,"%s · %s",row.sample,row.project);label_fitted(30,y+5,520,text);
+    snprintf(text,sizeof text,"%s · %s",row.created?date:"日期未知",row.archived?"TF卡":"板内");label(30,y+34,text,MUTED);
+    button(590,y+8,176,46,"导出手机",Action::HistoryExportRow,i,GREEN);hit(18,y,560,62,Action::HistoryItemOpen,i);}
+  if(!count)label(28,180,archived<0?"TF卡不可用":"暂无往期项目",MUTED);
+  page_control(list_page,max(1,(count+3)/4),330,75,240,46);nav();
+}
+
+void draw_history_date() {
+  title_bar("选择历史日期","输入年月日，例如 20261102");
+  box(24,72,750,48,CARD);label(36,82,history_date_entry[0]?history_date_entry:"请输入八位日期",CYAN);
+  const char* keys="123456789C0<";
+  for(int i=0;i<12;++i){int col=i%3,row=i/3;char text[4]={keys[i],0};
+    if(keys[i]=='C')strcpy(text,"清");else if(keys[i]=='<')strcpy(text,"删");
+    button(80+col*155,130+row*67,140,57,text,Action::HistoryDateKey,keys[i],KEY_BG);}
+  button(570,151,190,90,"查找",Action::HistoryDateApply,0,GREEN);
+  button(570,265,190,90,"全部日期",Action::HistoryAll,0,BLUE);nav();
+}
+
+void draw_history_detail() {
+  char heading[80];snprintf(heading,sizeof heading,"%s · %s",history_sample.name,history_run.name);title_bar(heading);
+  button(505,9,160,46,history_selected_archived?"恢复项目":"打开项目",Action::HistoryRestore,0,GREEN);
+  button(495,75,285,46,"导出到手机",Action::HistoryExport,0,BLUE);
+  if(!history_selected_archived){int index=lab_find_run(history_selected_id);if(index>=0)button(288,75,192,46,"录入数据",Action::ResultOpen,index,BLUE);}
+  const int groups=history_has_result?history_result.group_count:0;
+  const int total=history_run.count+groups;
+  list_page=constrain(list_page,0,max(0,(total-1)/4));
+  page_control(list_page,max(1,(total+3)/4),18,75,260,46);
+  for(int row=0;row<4&&list_page*4+row<total;++row){int i=list_page*4+row,y=132+row*69;box(18,y,764,62,BLUE);
+    char line[150];
+    if(i<history_run.count){const Step& s=history_run.steps[i];
+      snprintf(line,sizeof line,"%s · %d 分钟 · %s",s.name,s.minutes,s.done?"已完成":s.skipped?"已跳过":s.started?"已开始":"待开始");
+      label_fitted(30,y+5,730,line);char date[32];record_time(s.started,date,sizeof date);label_fitted(30,y+34,730,date,MUTED);
+    }else {const auto& group=history_result.groups[i-history_run.count];auto value=calculate_result(history_result,i-history_run.count);
+      snprintf(line,sizeof line,"%s · %s %s",group.name,value.valid?value.text:"未完成",value.unit);label_fitted(30,y+5,730,line);
+      String readings;for(int k=0;k<group.count&&k<kReadings;++k){if(k)readings+=" / ";readings+=group.readings[k][0]?group.readings[k]:"--";}
+      label_fitted(30,y+34,730,readings.c_str(),MUTED);}
+    hit(18,y,764,62,Action::HistoryFieldOpen,i);}
+  nav();
+}
+
+void draw_history_field() {
+  title_bar("历史详情",history_run.name);
+  char line[160],date[32];
+  if(history_field<history_run.count){const Step& s=history_run.steps[history_field];
+    snprintf(line,sizeof line,"%s · %d 分钟 · %s",s.name,s.minutes,mode_label(s.mode));label_fitted(28,82,740,line,CYAN);
+    const int64_t times[]={s.started,s.started&&s.minutes>0?due_ms(s):0,s.done,s.skipped};
+    const char* names[]={"开始","计划到点","确认完成","跳过"};
+    for(int i=0;i<4;++i){record_time(times[i],date,sizeof date);snprintf(line,sizeof line,"%s：%s",names[i],date);label_fitted(28,142+i*55,740,line);}
+  }else if(history_has_result&&history_field-history_run.count<history_result.group_count){
+    int group_index=history_field-history_run.count;const auto& group=history_result.groups[group_index];
+    snprintf(line,sizeof line,"%s · %s",group.name,group.segregation?"离析":"普通");label_fitted(28,82,740,line,CYAN);
+    for(int i=0;i<group.count&&i<kReadings;++i){snprintf(line,sizeof line,"读数%d：%s",i+1,group.readings[i][0]?group.readings[i]:"--");label_fitted(28+(i%2)*380,135+(i/2)*52,360,line);}
+    const auto value=calculate_result(history_result,group_index);
+    snprintf(line,sizeof line,"结果：%s %s",value.valid?value.text:"未完成",value.unit);label_fitted(28,310,740,line,CYAN);
+    if(history_result.metric==Metric::Mass){snprintf(line,sizeof line,"质量修正：%s",group.correction[0]?group.correction:"0");label_fitted(28,362,740,line,MUTED);}
+    else if(history_has_comparison){const auto& c=history_comparisons[group_index];
+      snprintf(line,sizeof line,"老化比较：%s %s",c.valid?c.text:c.reason,c.unit);label_fitted(28,362,740,line,MUTED);}
+  }
   nav();
 }
 
@@ -840,7 +992,7 @@ void draw_run() {
     hit(18, y, 291, 51, Action::SelectStep, i);
   }
   box(322, 74, 460, 339, CARD);
-  label(338, 83, run.sample, MUTED);
+  label_fitted(338, 83, 240, run.sample, MUTED);
   label(338, 117, step.name);
   char status[64]; countdown(step, now_ms(), status, sizeof status);
   if (step.done) strcpy(status, "已确认完成");
@@ -1051,7 +1203,8 @@ void draw_confirm() {
                         confirm_kind == ConfirmKind::DeleteSample ? "删除样品及全部项目？" :
                         confirm_kind == ConfirmKind::DeleteRun ? "删除这个实验项目？" :
                         confirm_kind == ConfirmKind::DeleteTemplate ? "删除试验类型？已有项目保留。" :
-                        confirm_kind == ConfirmKind::DeleteStep ? "删除这个模板步骤？" : "";
+                        confirm_kind == ConfirmKind::DeleteStep ? "删除这个模板步骤？" :
+                        confirm_kind == ConfirmKind::RestoreHistory ? "恢复此项目到板内？" : "";
   centered(130, 152, 540, message);
   button(166, 277, 192, 68, "取消", Action::Cancel);
   button(442, 277, 192, 68, "确定", Action::Confirm, 0, RED);
@@ -1092,6 +1245,10 @@ void draw_all() {
   switch (page) {
     case Page::Dashboard: draw_dashboard(); break;
     case Page::SampleDates: draw_sample_dates(); break;
+    case Page::HistoryList: draw_history_list(); break;
+    case Page::HistoryDetail: draw_history_detail(); break;
+    case Page::HistoryDate: draw_history_date(); break;
+    case Page::HistoryField: draw_history_field(); break;
     case Page::Samples: draw_samples(); break;
     case Page::Sample: draw_sample(); break;
     case Page::Run: draw_run(); break;
@@ -1145,6 +1302,9 @@ void go_back() {
   else if(page==Page::ExportSamples)page=Page::ExportDates;
   else if(page==Page::ExportDates)page=Page::Dashboard;
   else if(page==Page::Transfer)page=export_return;
+  else if(page==Page::HistoryField)page=Page::HistoryDetail;
+  else if(page==Page::HistoryDetail||page==Page::HistoryDate)page=Page::HistoryList;
+  else if(page==Page::HistoryList)page=Page::SampleDates;
   else if(page==Page::EditText&&(edit_target==EditTarget::ResultGroupName||edit_target==EditTarget::ResultStandard||edit_target==EditTarget::ResultNotes||edit_target==EditTarget::ResultUnit))page=edit_target==EditTarget::ResultGroupName?Page::Results:Page::ResultOptions;
   else if (page == Page::Samples) page = Page::SampleDates;
   else if (page == Page::StepRecord) page=Page::SampleRecords;
@@ -1176,6 +1336,12 @@ void make_generic(Run& run, const char* name, int minutes) {
 void add_from_template(int template_index) {
   if (selected_sample < 0 || selected_sample >= lab.sample_count ||
       template_index < 0 || template_index >= templates.count) return;
+  if(!clock_ok){notice("请先设置时钟，再创建项目");return;}
+  if(lab.run_count>=kMaxRuns) {
+    const uint32_t sample_id=lab.samples[selected_sample].id;
+    if(!history_make_room(false,sample_id)){notice("项目已满，暂无可自动归档的项目");return;}
+    selected_sample=lab_find_sample(sample_id);if(selected_sample<0){notice("样品不存在");return;}
+  }
   const LabTemplate& source = templates.items[template_index];
   Run run{};
   run.phase = project_phase;
@@ -1183,7 +1349,7 @@ void add_from_template(int template_index) {
   run.count = source.count;
   for (int i = 0; i < run.count; ++i)
     step_clear(&run.steps[i], source.steps[i].name, source.steps[i].minutes, source.steps[i].mode);
-  const int index = lab_add_run(selected_sample, run);
+  const int index = lab_add_run(selected_sample, run, clock_ok ? now_ms() : 0);
   if (index < 0) { notice("创建失败，请检查存储或项目数量"); return; }
   selected_run = index; selected_step = 0; list_page = 0; page = Page::Sample;
   notice("已添加实验项目");
@@ -1237,6 +1403,69 @@ void handle_action(Action action, int arg) {
     }
     case Action::PocketLock: lock_display(); break;
     case Action::SampleRecords: page=Page::SampleRecords;list_page=0;break;
+    case Action::HistoryOpen: history_date_filter=0;list_page=0;page=Page::HistoryList;break;
+    case Action::HistoryAll: history_date_filter=0;list_page=0;page=Page::HistoryList;break;
+    case Action::HistoryDateOpen: memset(history_date_entry,0,sizeof history_date_entry);page=Page::HistoryDate;break;
+    case Action::HistoryDateKey: {
+      size_t n=strlen(history_date_entry);
+      if(arg=='C')history_date_entry[0]=0;else if(arg=='<'){if(n)history_date_entry[n-1]=0;}
+      else if(arg>='0'&&arg<='9'&&n<8){history_date_entry[n]=char(arg);history_date_entry[n+1]=0;}break;
+    }
+    case Action::HistoryDateApply: {
+      if(strlen(history_date_entry)!=8){notice("请输入八位日期");break;}
+      const int key=atoi(history_date_entry),year=key/10000,month=(key/100)%100,day=key%100;
+      struct tm date{};date.tm_year=year-1900;date.tm_mon=month-1;date.tm_mday=day;date.tm_hour=12;
+      if(year<2020||year>2099||month<1||month>12||day<1||day>31||mktime(&date)==time_t(-1)||
+         date.tm_year!=year-1900||date.tm_mon!=month-1||date.tm_mday!=day){notice("日期无效");break;}
+      history_date_filter=key;list_page=0;page=Page::HistoryList;break;
+    }
+    case Action::HistoryItemOpen: {
+      if(arg<0||arg>=4||!history_rows[arg].id)break;
+      const HistoryRow& row=history_rows[arg];history_selected_id=row.id;history_selected_archived=row.archived;
+      history_has_comparison=false;history_comparison_baseline=0;memset(history_comparisons,0,sizeof history_comparisons);
+      if(row.archived) {
+        if(!history_read(row.id,history_sample,history_run,history_result,history_has_result,nullptr,history_comparisons,&history_comparison_baseline,&history_has_comparison)){notice("归档无法读取");break;}
+      }else {
+        int index=lab_find_run(row.id);if(index<0){notice("项目不存在");break;}
+        history_run=lab.runs[index];int sample=lab_find_sample(history_run.sample_id);if(sample<0){notice("样品不存在");break;}
+        history_sample=lab.samples[sample];const ResultRecord* result=results_for(history_run);
+        history_has_result=result!=nullptr;if(result){history_result=*result;
+          if(history_run.phase!=AgingPhase::Original&&result->metric!=Metric::Mass&&result->metric!=Metric::Other){history_has_comparison=true;
+            for(int g=0;g<result->group_count;++g)history_comparisons[g]=result_derived(history_run,g,&history_comparison_baseline);}}
+      }
+      list_page=0;page=Page::HistoryDetail;break;
+    }
+    case Action::HistoryExportRow: {
+      const int previous_page=list_page;
+      handle_action(Action::HistoryItemOpen,arg);
+      if(page==Page::HistoryDetail) {
+        handle_action(Action::HistoryExport,0);
+        if(page==Page::Transfer)export_return=Page::HistoryList;
+        else page=Page::HistoryList;
+      }
+      list_page=previous_page;break;
+    }
+    case Action::HistoryFieldOpen:
+      if(arg>=0&&arg<history_run.count+(history_has_result?history_result.group_count:0)){history_field=arg;page=Page::HistoryField;}break;
+    case Action::HistoryRestore:
+      if(history_selected_archived)confirm_kind=ConfirmKind::RestoreHistory;
+      else {int index=lab_find_run(history_selected_id);if(index<0){notice("项目不存在");break;}
+        selected_run=index;selected_sample=lab_find_sample(lab.runs[index].sample_id);selected_step=0;list_page=0;page=Page::Run;}
+      break;
+    case Action::HistoryExport: {
+      if(voice_playing||voice_upload_active){notice("请先结束当前语音播放或传输");break;}
+      if(history_selected_archived&&transfer_active()&&transfer_report_only()&&history_shared_id==history_selected_id) {
+        export_return=Page::HistoryDetail;qr_wifi=true;prepare_transfer_qr();page=Page::Transfer;break;
+      }
+      bool ok=false;
+      if(history_selected_archived)ok=history_report(history_selected_id,exported_path);
+      else {int index=lab_find_run(history_selected_id);if(index>=0)ok=result_export(uint32_t(1)<<index,true,exported_path);}
+      if(!ok){notice("导出失败，请检查TF卡");break;}
+      export_return=Page::HistoryDetail;
+      if(!transfer_start_report(exported_path)){notice("报告已保存，热点开启失败");break;}
+      history_shared_id=history_selected_id;
+      qr_wifi=true;prepare_transfer_qr();page=Page::Transfer;break;
+    }
     case Action::OpenRecord: selected_run=arg;selected_step=0;page=Page::StepRecord;break;
     case Action::Home: page = Page::Dashboard; list_page = 0; task_tab = 0; break;
     case Action::Samples: page = Page::SampleDates; list_page = 0; break;
@@ -1259,6 +1488,7 @@ void handle_action(Action action, int arg) {
     case Action::NewSample: memset(entry, 0, sizeof entry); page = Page::NewSample; start_pinyin_name(); break;
     case Action::SaveSample: {
       if (pinyin_mode && pinyin_input[0]) { notice("请先选拼音候选字"); break; }
+      if(lab.sample_count>=kMaxSamples&&!history_make_room(true,0)){notice("样品已满，暂无可自动归档的项目");break;}
       const int i = lab_add_sample(entry, now_ms());
       if (i < 0) notice("请输入编号，或检查存储空间");
       else { selected_sample = i; selected_date=sample_date_key(lab.samples[i]); page = Page::Sample; list_page = 0; }
@@ -1335,8 +1565,15 @@ void handle_action(Action action, int arg) {
     case Action::SaveProject: {
       if (pinyin_mode && pinyin_input[0]) { notice("请先选拼音候选字"); break; }
       if (!entry[0]) { notice("请输入实验项目名称"); break; }
+      if(!clock_ok){notice("请先设置时钟，再创建项目");break;}
+      if(selected_sample<0||selected_sample>=lab.sample_count){notice("样品不存在");break;}
+      if(lab.run_count>=kMaxRuns) {
+        const uint32_t sample_id=lab.samples[selected_sample].id;
+        if(!history_make_room(false,sample_id)){notice("项目已满，暂无可自动归档的项目");break;}
+        selected_sample=lab_find_sample(sample_id);if(selected_sample<0){notice("样品不存在");break;}
+      }
       Run run{}; make_generic(run, entry, project_minutes); run.phase=project_phase;
-      const int i = lab_add_run(selected_sample, run);
+      const int i = lab_add_run(selected_sample, run, clock_ok ? now_ms() : 0);
       if (i < 0) notice("创建失败，请检查存储或项目数量");
       else { selected_run = i; page = Page::Sample; step_page = 0; list_page=0; }
       break;
@@ -1491,6 +1728,12 @@ void handle_action(Action action, int arg) {
       const ConfirmKind kind = confirm_kind; confirm_kind = ConfirmKind::None;
       if (kind == ConfirmKind::Skip || kind == ConfirmKind::Early) {
         selected_run = pending_run; start_or_finish(pending_step, true);
+      } else if (kind == ConfirmKind::RestoreHistory) {
+        if(alert_run>=0||voice_playing||voice_upload_active||transfer_active()){notice("请先结束提醒或传输");break;}
+        const char* err=history_restore(history_selected_id,clock_ok?now_ms():0);
+        if(err){notice(err);break;}
+        selected_run=lab_find_run(history_selected_id);selected_sample=selected_run>=0?lab_find_sample(lab.runs[selected_run].sample_id):-1;
+        selected_step=0;list_page=0;page=Page::Run;notice("已恢复，24小时内不会自动归档");
       } else if (kind == ConfirmKind::DeleteSample) {
         if (!lab_remove_sample(selected_sample)) notice("删除未保存");
         page = Page::Samples; selected_sample = -1; selected_run = -1; list_page = 0;
@@ -1567,9 +1810,11 @@ void handle_touch(int x, int y) {
 void handle_swipe(int delta_y) {
   const int direction = delta_y < 0 ? 1 : -1;
   int max_page = 0;
-  if(page==Page::PageJump||page==Page::ResultStandards||page==Page::NumericPad||page==Page::Results||page==Page::ResultOptions||page==Page::Transfer)return;
-  if(page==Page::ResultSummary){if(direction<0)summary_page=max(0,summary_page-1);redraw=true;return;}
-  if(page==Page::ExportSelect)max_page=max(0,(export_sample_run_count()-1)/4);
+  if(page==Page::PageJump||page==Page::ResultStandards||page==Page::NumericPad||page==Page::Results||page==Page::ResultOptions||page==Page::Transfer||page==Page::HistoryField)return;
+  if(page==Page::HistoryDetail){max_page=max(0,(history_run.count+(history_has_result?history_result.group_count:0)-1)/4);}
+  else if(page==Page::HistoryList){int count=0;const int64_t now=now_ms();for(int i=0;i<lab.run_count;++i)if(history_is_past(lab.runs[i],now)&&(!history_date_filter||history_date_key(run_age_get(lab.runs[i].id))==history_date_filter))++count;count+=max(0,history_list(0,nullptr,0,history_date_filter));max_page=max(0,(count-1)/4);}
+  else if(page==Page::ResultSummary){if(direction<0)summary_page=max(0,summary_page-1);redraw=true;return;}
+  else if(page==Page::ExportSelect)max_page=max(0,(export_sample_run_count()-1)/4);
   else if(page==Page::ExportDates){int keys[kMaxSamples]={};max_page=max(0,(sample_dates(keys)-1)/4);}
   else if(page==Page::ExportSamples)max_page=max(0,(samples_on_date(export_date)-1)/4);
   else if (page == Page::SampleDates) { int keys[kMaxSamples]={}; max_page=max(0,(sample_dates(keys)-1)/4); }
@@ -1629,11 +1874,13 @@ void check_reminders(uint32_t tick) {
     if (step.notified || !is_due(step, at)) continue;
     step.notified = true;
     if (!lab_save()) notice("提醒状态保存失败");
+    const uint32_t alert_tick = millis();
+    Serial.printf("ALERT run=%u step=%d mode=%u save_ms=%lu\n", run.id, j, unsigned(step.mode), static_cast<unsigned long>(alert_tick - tick));
     alert_run = i; alert_step = j;
     voice_attempted = false;
-    alert_end_ms = tick + (step.mode == RemindMode::Alarm ? 30000 : 8000);
-    alarm_sound_end_ms = tick + 5000;
-    next_beep_ms = tick;
+    alert_end_ms = alert_tick + (step.mode == RemindMode::Alarm ? 30000 : 8000);
+    alarm_sound_end_ms = alert_tick + 5000;
+    next_beep_ms = alert_tick;
     apply_brightness(brightness);
     if (step.mode == RemindMode::Notification) {
       voice_attempted = true;
@@ -1692,7 +1939,100 @@ void serial_voice_list() {
   Serial.println("VOICE_LIST_END");
 }
 
+uint32_t voice_crc_update(uint32_t crc, const uint8_t* data, size_t size) {
+  for (size_t i = 0; i < size; ++i) {
+    crc ^= data[i];
+    for (int b = 0; b < 8; ++b) crc = (crc >> 1) ^ (0xedb88320U & (0U - (crc & 1U)));
+  }
+  return crc;
+}
+
+void voice_upload_abort(const char* why) {
+  voice_upload_file.close();
+  SD_MMC.remove(voice_upload_temp);
+  voice_upload_active = false;
+  Serial.printf("VOICE_ERROR %s\n", why);
+}
+
+void voice_upload_begin(const char* line) {
+  char name[17] = {}, extra = 0;
+  unsigned long size = 0, crc = 0;
+  if (sscanf(line, "voice-put %16s %lu %lx %c", name, &size, &crc, &extra) != 3 || strlen(name) != 16 ||
+      size == 0 || size > 846720 || size % 4 != 0 || !voice_sd_ready || voice_playing || transfer_active()) {
+    Serial.println("VOICE_ERROR bad_request"); return;
+  }
+  for (int i = 0; i < 16; ++i)
+    if (!((name[i] >= '0' && name[i] <= '9') || (name[i] >= 'a' && name[i] <= 'f'))) {
+      Serial.println("VOICE_ERROR bad_name"); return;
+    }
+  if (!SD_MMC.exists("/voice") && !SD_MMC.mkdir("/voice")) { Serial.println("VOICE_ERROR mkdir"); return; }
+  snprintf(voice_upload_path, sizeof voice_upload_path, "/voice/%s.pcm", name);
+  snprintf(voice_upload_temp, sizeof voice_upload_temp, "/voice/%s.tmp", name);
+  if (SD_MMC.exists(voice_upload_path)) {
+    File existing = SD_MMC.open(voice_upload_path, FILE_READ);
+    if (!existing) { Serial.println("VOICE_ERROR existing_open"); return; }
+    uint8_t buffer[256]; uint32_t existing_crc = 0xffffffffU, existing_size = 0;
+    while (existing.available()) {
+      size_t n = existing.read(buffer, sizeof buffer);
+      if (!n) break;
+      existing_size += n; existing_crc = voice_crc_update(existing_crc, buffer, n); yield();
+    }
+    existing.close();
+    Serial.printf("VOICE_EXISTS %lu %08lx\n", static_cast<unsigned long>(existing_size), static_cast<unsigned long>(existing_crc ^ 0xffffffffU)); return;
+  }
+  if (SD_MMC.exists(voice_upload_temp)) { Serial.println("VOICE_ERROR temp_exists"); return; }
+  voice_upload_file = SD_MMC.open(voice_upload_temp, FILE_WRITE);
+  if (!voice_upload_file) { Serial.println("VOICE_ERROR open"); return; }
+  voice_upload_size = size; voice_upload_expected_crc = crc; voice_upload_received = 0;
+  voice_upload_crc = 0xffffffffU; voice_upload_last_ms = millis(); voice_upload_last_ack_ms = millis(); voice_upload_active = true;
+  Serial.println("VOICE_READY 128");
+}
+
+void voice_upload_poll() {
+  if (millis() - voice_upload_last_ms > 5000) {
+    Serial.printf("VOICE_PROGRESS %lu\n", static_cast<unsigned long>(voice_upload_received));
+    voice_upload_abort("timeout"); return;
+  }
+  if (voice_upload_received && voice_upload_received % 128 == 0 && millis() - voice_upload_last_ack_ms >= 500) {
+    Serial.printf("VOICE_ACK %lu\n", static_cast<unsigned long>(voice_upload_received));
+    voice_upload_last_ack_ms = millis();
+  }
+  uint8_t buf[256];
+  while (Serial.available() && voice_upload_active) {
+    size_t remaining = voice_upload_size - voice_upload_received;
+    size_t block_remaining = 128 - voice_upload_received % 128;
+    size_t n = min(static_cast<size_t>(Serial.available()), min(sizeof buf, min(remaining, block_remaining)));
+    n = Serial.read(buf, n);
+    if (!n) break;
+    if (voice_upload_file.write(buf, n) != n) { voice_upload_abort("write"); return; }
+    voice_upload_crc = voice_crc_update(voice_upload_crc, buf, n);
+    voice_upload_received += n; voice_upload_last_ms = millis();
+    if (voice_upload_received == voice_upload_size) {
+      voice_upload_file.flush(); voice_upload_file.close();
+      if ((voice_upload_crc ^ 0xffffffffU) != voice_upload_expected_crc) { voice_upload_abort("crc"); return; }
+      File check = SD_MMC.open(voice_upload_temp, FILE_READ);
+      uint32_t check_crc = 0xffffffffU, checked = 0;
+      if (!check) { voice_upload_abort("readback_open"); return; }
+      while (check.available()) {
+        size_t count = check.read(buf, sizeof buf);
+        if (!count) break;
+        checked += count; check_crc = voice_crc_update(check_crc, buf, count);
+        yield();
+      }
+      check.close();
+      if (checked != voice_upload_size || (check_crc ^ 0xffffffffU) != voice_upload_expected_crc) { voice_upload_abort("readback"); return; }
+      if (!SD_MMC.rename(voice_upload_temp, voice_upload_path)) { voice_upload_abort("rename"); return; }
+      voice_upload_active = false; Serial.printf("VOICE_DONE %lu\n", static_cast<unsigned long>(checked)); return;
+    }
+    if (voice_upload_received % 128 == 0) {
+      Serial.printf("VOICE_ACK %lu\n", static_cast<unsigned long>(voice_upload_received));
+      voice_upload_last_ack_ms = millis();
+    }
+  }
+}
+
 void serial_command() {
+  if (voice_upload_active) { voice_upload_poll(); return; }
   if (!Serial.available()) return;
   static char line[96] = {};
   static int length = 0;
@@ -1708,6 +2048,10 @@ void serial_command() {
         if (valid_time(value)) {
           clock_edit = value; save_clock(); Serial.println("clock ok");
         } else Serial.println("bad clock");
+      } else if (!strncmp(line, "voice-put ", 10)) {
+        voice_upload_begin(line);
+        length = 0;
+        return;
       } else if (!strcmp(line, "date-list")) {
         for (int i=0;i<lab.sample_count;++i) {
           const Sample& sample=lab.samples[i];
@@ -1721,6 +2065,57 @@ void serial_command() {
         }
       } else if (!strcmp(line,"guard-test")) {
         Serial.println(pocket_guard_selftest() ? "GUARD PASS 9" : "GUARD FAIL");
+      } else if (!strcmp(line,"history-test")) {
+        Serial.println(history_selftest()?"HISTORY_TEST PASS":"HISTORY_TEST FAIL");
+      } else if (!strcmp(line,"history-e2e-test")) {
+        if(alert_run>=0||voice_playing||voice_upload_active||transfer_active()||!clock_ok)Serial.println("HISTORY_E2E unavailable");
+        else {uint32_t fixture=0;const char* error=history_e2e_test(now_ms(),&fixture);Serial.printf("HISTORY_E2E %s%s%s stack_free=%u fixture=%u\n",error?"FAIL":"PASS",error?" ":"",error?error:"",unsigned(uxTaskGetStackHighWaterMark(nullptr)),fixture);}
+      } else if (!strncmp(line,"history-clean-fixture ",22)) {
+        unsigned long id=0;char extra=0;
+        if(sscanf(line,"history-clean-fixture %lu %c",&id,&extra)!=1)Serial.println("HISTORY_FIXTURE invalid");
+        else Serial.printf("HISTORY_FIXTURE %s\n",history_cleanup_fixture(static_cast<uint32_t>(id))?"clean":"failed");
+      } else if (!strncmp(line,"history-clean-test ",19)) {
+        unsigned long id=0;char extra=0;
+        if(sscanf(line,"history-clean-test %lu %c",&id,&extra)!=1)Serial.println("HISTORY_CLEAN invalid");
+        else {const char* error=history_cleanup_aborted(static_cast<uint32_t>(id));Serial.printf("HISTORY_CLEAN %s%s%s\n",error?"FAIL":"PASS",error?" ":"",error?error:"");}
+      } else if (!strcmp(line,"history-policy-test")) {
+        const int64_t start=1793590859891LL,day=86400000LL;
+        Run test{};test.count=1;step_clear(&test.steps[0],"水浴",1,RemindMode::Alarm);
+        test.steps[0].started=start;
+        bool ok=!history_age_reached(start,start+3*day-1,0,3)&&history_age_reached(start,start+3*day,0,3)&&
+          !history_age_reached(start,start+7*day-1,0,7)&&history_age_reached(start,start+7*day,0,7)&&
+          !history_age_reached(0,start+7*day,0,7)&&!history_age_reached(start,start-1,0,3)&&
+          !history_age_reached(start,start+7*day,start+8*day,7)&&history_run_busy(test,start+1000)&&
+          history_run_busy(test,start+60000);
+        test.steps[0].notified=true;ok=ok&&!history_run_busy(test,start+60000);
+        test.steps[0].notified=false;test.steps[0].mode=RemindMode::None;
+        ok=ok&&history_run_busy(test,start+59999)&&!history_run_busy(test,start+60000);
+        test.steps[0].minutes=0;ok=ok&&!history_run_busy(test,start+1);
+        Serial.println(ok?"HISTORY_POLICY PASS":"HISTORY_POLICY FAIL");
+      } else if (!strncmp(line,"voice-test ",11)) {
+        unsigned long id = 0; char extra = 0;
+        if (sscanf(line,"voice-test %lu %c", &id, &extra) != 1 || alert_run >= 0 || voice_playing) Serial.println("VOICE_TEST unavailable");
+        else {
+          int index = lab_find_run(static_cast<uint32_t>(id));
+          if (index < 0 || lab.runs[index].count < 1) Serial.println("VOICE_TEST no_run");
+          else Serial.printf("VOICE_TEST %s\n", voice_start(lab.runs[index], lab.runs[index].steps[0]) ? "started" : "failed");
+        }
+      } else if (!strcmp(line,"lab-codec-test")) {
+        uint8_t* packed = static_cast<uint8_t*>(malloc(sizeof(LabData) * 2));
+        uint8_t* decoded = static_cast<uint8_t*>(malloc(sizeof(LabData)));
+        bool ok = packed && decoded;
+        size_t size = 0;
+        if (ok) {
+          size = lab_pack(reinterpret_cast<const uint8_t*>(&lab), sizeof lab, packed, sizeof(LabData) * 2);
+          ok = size && lab_unpack(packed, size, decoded, sizeof lab) && !memcmp(decoded, &lab, sizeof lab);
+          const uint8_t malformed[] = { 0x02, 0x01 };
+          uint8_t small[4] = {};
+          ok = ok && !lab_unpack(malformed, sizeof malformed, small, sizeof small);
+          const uint8_t overflow[] = { 0xff };
+          ok = ok && !lab_unpack(overflow, sizeof overflow, small, sizeof small);
+        }
+        free(packed); free(decoded);
+        Serial.printf("lab-codec-test %s raw=%u packed=%u\n", ok ? "PASS" : "FAIL", unsigned(sizeof lab), unsigned(size));
       } else if (!strcmp(line,"lock")) {
         lock_display();
       } else if (!strcmp(line,"status")) {
@@ -1733,7 +2128,7 @@ void serial_command() {
         uint8_t pwm_reg = IO_EXTENSION_PWM_ADDR, pwm_value = 0;
         const esp_err_t output_result = i2c_master_transmit_receive(IO_EXTENSION.addr, &output_reg, 1, &output_value, 1, 100);
         const esp_err_t pwm_result = i2c_master_transmit_receive(IO_EXTENSION.addr, &pwm_reg, 1, &pwm_value, 1, 100);
-        Serial.printf("samples=%d runs=%d templates=%d steps=%d page=%d selected=%d light_off=%d dimmed=%d idle_ms=%u flash_dim=%d types_ok=%d storage=%d generation=%u rtc=%d free_heap=%u irq=%u presses=%u wakes=%u bl_pin=%d bl_mask=%u out_reg=%d pwm_reg=%d alarm_volume=%d sound_settings=%d voice_sd=%d battery_mv=%d battery_pct=%d battery_valid=%d battery_raw=%u battery_settling=%d schema=3 locked=%d\n",
+        Serial.printf("samples=%d runs=%d templates=%d steps=%d page=%d selected=%d light_off=%d dimmed=%d idle_ms=%u flash_dim=%d types_ok=%d storage=%d generation=%u rtc=%d free_heap=%u irq=%u presses=%u wakes=%u bl_pin=%d bl_mask=%u out_reg=%d pwm_reg=%d alarm_volume=%d sound_settings=%d voice_sd=%d battery_mv=%d battery_pct=%d battery_valid=%d battery_raw=%u schema=3 locked=%d\n",
                       lab.sample_count, lab.run_count, templates.count, steps,
                       static_cast<int>(page), selected_template, backlight_off, dimmed,
                       millis() - last_input_ms,
@@ -1741,7 +2136,7 @@ void serial_command() {
                       lab_generation(), clock_ok, ESP.getFreeHeap(), touch_irq_count,
                       touch_press_count, wake_attempt_count, backlight_pin, IO_EXTENSION.Last_io_value,
                       output_result == ESP_OK ? output_value : -1, pwm_result == ESP_OK ? pwm_value : -1,
-                      alarm_volume, sound_settings_ready, voice_sd_ready, static_cast<int>(lroundf(battery_voltage*1000)), battery_percent, battery_valid, battery_raw, battery_settling, screen_locked);
+                      alarm_volume, sound_settings_ready, voice_sd_ready, static_cast<int>(lroundf(battery_voltage*1000)), -1, battery_valid, battery_raw, screen_locked);
       } else if (!strcmp(line, "wake")) {
         wake_display(millis());
         Serial.println("wake ok");
@@ -1817,13 +2212,14 @@ void setup() {
   PCF85063A_Init();
   sync_from_rtc();
   storage_ok = lab_load();
+  if(storage_ok && !run_age_init())Serial.println("Project date storage unavailable");
   if (storage_ok) sound_settings_load();
   if(storage_ok && !results_load())Serial.println("Results NVS unavailable; timer data preserved");
   templates_ok = storage_ok && templates_load();
   IO_EXTENSION_Output(IO_EXTENSION_IO_4, 1);
   if (SD_MMC.setPins(12, 11, 13)) voice_sd_ready = SD_MMC.begin("/sdcard", true, false);
   Serial.printf("voice_sd=%d\n", voice_sd_ready);
-  if(storage_ok) records_begin(voice_sd_ready);
+  if(storage_ok) {records_begin(voice_sd_ready);history_recover();}
   waveshare_esp32_s3_rgb_lcd_init();
   void* a = nullptr;
   void* b = nullptr;
@@ -1908,6 +2304,7 @@ void loop() {
     check_reminders(tick);
     last_reminder_check_ms = tick;
   }
+  history_auto_tick(tick);
   voice_tick();
   static uint32_t last_records_retry=0;
   if(storage_ok && !voice_playing && !transfer_active() && !records_ok() && tick-last_records_retry>=30000) {
@@ -1916,6 +2313,7 @@ void loop() {
     SD_MMC.end();
     voice_sd_ready=SD_MMC.begin("/sdcard",true,false);
     records_begin(voice_sd_ready);
+    history_recover();
     redraw=true;
   }
   if (voice_failed) { voice_failed = false; alarm_melody(); }
@@ -1926,5 +2324,5 @@ void loop() {
   }
   const uint32_t refresh_interval = live_display_needed() ? 1000 : 60000;
   if (!backlight_off && (redraw || tick - last_draw_ms >= refresh_interval)) draw_all();
-  delay(voice_playing ? 0 : transfer_active() ? 2 : screen_locked ? 20 : 40);
+  delay(voice_playing || voice_upload_active ? 0 : transfer_active() ? 2 : screen_locked ? 20 : 40);
 }
