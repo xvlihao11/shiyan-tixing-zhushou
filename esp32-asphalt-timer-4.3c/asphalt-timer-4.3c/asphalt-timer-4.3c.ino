@@ -2529,5 +2529,6 @@ void loop() {
   }
   const uint32_t refresh_interval = page==Page::Stopwatch && stopwatch.running && !screen_locked ? 50 : live_display_needed() ? 1000 : 60000;
   if (!backlight_off && (redraw || tick - last_draw_ms >= refresh_interval)) draw_all();
-  delay(voice_playing || voice_upload_active ? 0 : record_tone_remaining>0 ? 1 : quick_record ? 2 : transfer_active() ? 2 : screen_locked ? 20 : 40);
+  // Leave enough time for 20 ms touch polling on ordinary lit pages.
+  delay(voice_playing || voice_upload_active ? 0 : record_tone_remaining>0 ? 1 : quick_record ? 2 : transfer_active() ? 2 : backlight_off || screen_locked ? 20 : 10);
 }
