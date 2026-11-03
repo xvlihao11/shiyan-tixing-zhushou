@@ -2,6 +2,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <math.h>
+#include <esp_timer.h>
 #include <nvs.h>
 #include <SD_MMC.h>
 #include "src/rgb_lcd_port/rgb_lcd_port.h"
@@ -15,6 +16,8 @@
 #include "src/run_age.hpp"
 #include "src/history.hpp"
 #include "src/pocket_guard.hpp"
+#include "src/stopwatch.hpp"
+#include "src/stopwatch_store.hpp"
 #include "src/tf_records.hpp"
 #include "src/result_store.hpp"
 #include "src/transfer.hpp"
@@ -34,7 +37,7 @@ uint16_t* frame_b = nullptr;
 
 enum class Page : uint8_t {
   Dashboard, Samples, Sample, Run, NewSample, PickProject, NewProject,
-  Templates, TemplateEdit, EditText, Clock, Settings, SampleDates, SampleRecords, StepRecord, Results, ResultOptions, NumericPad, ResultSummary, ExportSelect, Transfer, ResultStandards, PageJump, ExportDates, ExportSamples, HistoryList, HistoryDetail, HistoryDate, HistoryField
+  Templates, TemplateEdit, EditText, Clock, Settings, SampleDates, SampleRecords, StepRecord, Results, ResultOptions, NumericPad, ResultSummary, ExportSelect, Transfer, ResultStandards, PageJump, ExportDates, ExportSamples, HistoryList, HistoryDetail, HistoryDate, HistoryField, Stopwatch, StopwatchRecords
 };
 enum class Action : uint8_t {
   None, Home, Samples, Back, Next, Prev, OpenSample, OpenRun, NewSample,
@@ -53,7 +56,8 @@ enum class Action : uint8_t {
   ResultSummary, SummaryPage, SummaryOpen, ExportOpen, ExportToggle, ExportScope, ExportTimes, ExportGenerate,
   TransferStart, TransferStop, TransferQR, MobileShare, StandardChoose, StandardCustom, JumpOpen, JumpKey, JumpGo,
   ExportDateOpen, ExportSampleOpen, ExportDateToggle, ExportSampleToggle, ExportRoot,
-  HistoryOpen, HistoryItemOpen, HistoryRestore, HistoryExport, HistoryDateOpen, HistoryDateKey, HistoryDateApply, HistoryAll, HistoryFieldOpen, HistoryExportRow
+  HistoryOpen, HistoryItemOpen, HistoryRestore, HistoryExport, HistoryDateOpen, HistoryDateKey, HistoryDateApply, HistoryAll, HistoryFieldOpen, HistoryExportRow,
+  StopwatchOpen, StopwatchToggle, StopwatchReset, StopwatchRecord, StopwatchRecords
 };
 // Archive, NVS and TF operations may nest; leave headroom for their call chains.
 SET_LOOP_TASK_STACK_SIZE(20480);
@@ -61,14 +65,17 @@ struct Hit { int x, y, w, h; Action action; int arg; };
 Hit hits[90];
 int hit_count = 0;
 Page page = Page::Dashboard;
+Stopwatch stopwatch;
+StopwatchStore stopwatch_store;
+Page stopwatch_return = Page::Settings;
 int selected_sample = -1, selected_run = -1, selected_template = -1;
 int selected_step = 0, list_page = 0, step_page = 0;
 Page jump_parent=Page::Dashboard;
 int jump_total=1;
-char jump_entry[4]={};
+char jump_entry[10]={};
 int task_tab = 0;  // 0: active timers, 1: due timers.
 int pending_run = -1, pending_step = -1;
-enum class ConfirmKind : uint8_t { None, Skip, Early, DeleteSample, DeleteRun, DeleteTemplate, DeleteStep, RestoreHistory };
+enum class ConfirmKind : uint8_t { None, Skip, Early, DeleteSample, DeleteRun, DeleteTemplate, DeleteStep, RestoreHistory, ResetStopwatch };
 ConfirmKind confirm_kind = ConfirmKind::None;
 char entry[32] = {};
 int project_minutes = 30;
@@ -349,7 +356,7 @@ void nav() {
   button(324, 428, 150, 48, "试验类型", Action::OpenTemplates, 0,
          page == Page::Templates || page == Page::TemplateEdit ? CYAN : BLUE);
   button(482, 428, 150, 48, "设置", Action::OpenSettings, 0,
-         page == Page::Settings || page == Page::Clock ? CYAN : BLUE);
+         page == Page::Settings || page == Page::Clock || page == Page::Stopwatch || page == Page::StopwatchRecords ? CYAN : BLUE);
   button(640, 428, 150, 48, "返回", Action::Back);
 }
 
@@ -1158,7 +1165,8 @@ void draw_keyboard(bool custom) {
 }
 
 void draw_clock() {
-  title_bar("设置时钟", clock_ok ? "RTC 已连接" : "RTC 时间未设置");
+  title_bar("设置时钟", clock_ok ? "RTC 已连接" : "RTC 未设置");
+  button(490,9,154,46,"秒表",Action::StopwatchOpen,0,BLUE);
   const char* fields[] = {"年", "月", "日", "时", "分"};
   int values[] = {clock_edit.year, clock_edit.month, clock_edit.day, clock_edit.hour, clock_edit.min};
   for (int i = 0; i < 5; ++i) {
@@ -1175,6 +1183,7 @@ void draw_clock() {
 
 void draw_settings() {
   title_bar("设置");
+  button(322,9,154,46,"秒表",Action::StopwatchOpen,0,BLUE);
   button(490,9,154,46,"锁屏",Action::PocketLock,0,BLUE);
   box(20, 75, 760, 75, CARD);
   char current[48]; format_clock(current, sizeof current);
@@ -1194,6 +1203,82 @@ void draw_settings() {
   nav();
 }
 
+void stopwatch_format(uint64_t us,char* out,size_t size) {
+  const uint64_t cs=us/10000;
+  snprintf(out,size,"%02llu:%02u:%02u.%02u",static_cast<unsigned long long>(cs/360000),
+           unsigned(cs/6000%60),unsigned(cs/100%60),unsigned(cs%100));
+}
+
+void draw_stopwatch_digits(const char* text) {
+  // Large fixed-width digits without allocating another framebuffer.
+  static const uint8_t segments[]={0x3f,0x06,0x5b,0x4f,0x66,0x6d,0x7d,0x07,0x7f,0x6f};
+  int width=0;
+  for(const char* p=text;*p;++p)width+=(*p==':'?18:*p=='.'?12:42)+8;
+  int x=(W-width+8)/2;
+  constexpr int y=111;
+  for(const char* p=text;*p;++p) {
+    if(*p==':'){box(x+5,y+20,7,7,CYAN);box(x+5,y+48,7,7,CYAN);x+=26;}
+    else if(*p=='.'){box(x+2,y+65,7,7,CYAN);x+=20;}
+    else {
+      const uint8_t s=segments[*p-'0'];
+      if(s&1)box(x+6,y,30,6,CYAN);
+      if(s&2)box(x+36,y+6,6,27,CYAN);
+      if(s&4)box(x+36,y+39,6,27,CYAN);
+      if(s&8)box(x+6,y+66,30,6,CYAN);
+      if(s&16)box(x,y+39,6,27,CYAN);
+      if(s&32)box(x,y+6,6,27,CYAN);
+      if(s&64)box(x+6,y+33,30,6,CYAN);
+      x+=50;
+    }
+  }
+}
+
+void draw_stopwatch() {
+  title_bar(stopwatch.running?"秒表 · 计时中":"秒表 · 已暂停");
+  button(490,9,154,46,"返回",Action::Back,0,BLUE);
+  char records[32];snprintf(records,sizeof records,"记录 (%lu)",static_cast<unsigned long>(stopwatch.record_count));
+  button(322,9,154,46,records,Action::StopwatchRecords,0,BLUE);
+  const uint64_t cs=stopwatch.elapsed_us(esp_timer_get_time())/10000;
+  char text[40];
+  stopwatch_format(stopwatch.elapsed_us(esp_timer_get_time()),text,sizeof text);
+  box(20,90,760,120,CARD);
+  draw_stopwatch_digits(text);
+  centered(20,218,760,"时 : 分 : 秒 . 百分秒",MUTED);
+  if(stopwatch.record_count){
+    char interval[40],latest[96];stopwatch_format(stopwatch.interval_us(stopwatch.record_count-1),interval,sizeof interval);
+    snprintf(latest,sizeof latest,"第 %lu 次记录 · 本段 %s",static_cast<unsigned long>(stopwatch.record_count),interval);
+    centered(20,260,760,latest,CYAN);
+  }else centered(20,260,760,"点击记录保存累计时间与分段用时",MUTED);
+  button(20,310,240,60,stopwatch.running?"暂停":cs?"继续":"开始",
+         Action::StopwatchToggle,0,stopwatch.running?ORANGE:GREEN);
+  if(stopwatch.running)button(280,310,240,60,"记录",Action::StopwatchRecord,0,BLUE);
+  else centered(280,330,240,"开始后可记录",MUTED);
+  if(!stopwatch.running)button(540,310,240,60,"清零",Action::StopwatchReset,0,BLUE);
+  else centered(540,330,240,"暂停后可清零",MUTED);
+  centered(20,389,760,stopwatch_store.saved(stopwatch.record_count)?"记录已存TF卡；锁屏继续；重启秒表清零":"无TF卡时暂存100条；锁屏继续；重启清零",MUTED);
+  nav();
+}
+
+void draw_stopwatch_records() {
+  title_bar("秒表记录");
+  button(490,9,154,46,"返回",Action::Back,0,BLUE);
+  const int pages=max(1,static_cast<int>((stopwatch.record_count+3)/4));list_page=constrain(list_page,0,pages-1);
+  page_control(list_page,pages,455,76,327,44);
+  label(28,86,"序号 / 累计时间 / 本段用时",MUTED);
+  for(int row=0;row<4;++row){
+    const int index=list_page*4+row;if(index>=stopwatch.record_count)break;
+    const int y=132+row*68;box(18,y,764,60,CARD);
+    char number[16],total[40],interval[40];snprintf(number,sizeof number,"%02d",index+1);
+    uint64_t t=0,d=0;
+    if(stopwatch_store.read(stopwatch,index,t,d)){stopwatch_format(t,total,sizeof total);stopwatch_format(d,interval,sizeof interval);}
+    else {snprintf(total,sizeof total,"TF记录不可读");snprintf(interval,sizeof interval,"请检查TF卡");}
+    label(30,y+18,number);label(130,y+18,total,CYAN);label(455,y+18,interval);
+  }
+  if(!stopwatch.record_count)label(28,170,"暂无记录，返回秒表开始计时后点击记录",MUTED);
+  label(28,398,"本段为相邻记录时间差；首段从开始算起",MUTED);
+  nav();
+}
+
 void draw_confirm() {
   if (confirm_kind == ConfirmKind::None) return;
   hit_count = 0;
@@ -1204,7 +1289,8 @@ void draw_confirm() {
                         confirm_kind == ConfirmKind::DeleteRun ? "删除这个实验项目？" :
                         confirm_kind == ConfirmKind::DeleteTemplate ? "删除试验类型？已有项目保留。" :
                         confirm_kind == ConfirmKind::DeleteStep ? "删除这个模板步骤？" :
-                        confirm_kind == ConfirmKind::RestoreHistory ? "恢复此项目到板内？" : "";
+                        confirm_kind == ConfirmKind::RestoreHistory ? "恢复此项目到板内？" :
+                        confirm_kind == ConfirmKind::ResetStopwatch ? "清零秒表？TF卡记录文件保留" : "";
   centered(130, 152, 540, message);
   button(166, 277, 192, 68, "取消", Action::Cancel);
   button(442, 277, 192, 68, "确定", Action::Confirm, 0, RED);
@@ -1271,6 +1357,8 @@ void draw_all() {
     case Page::TemplateEdit: draw_template_editor(); break;
     case Page::EditText: draw_keyboard(false); break;
     case Page::Clock: draw_clock(); break;
+    case Page::Stopwatch: draw_stopwatch(); break;
+    case Page::StopwatchRecords: draw_stopwatch_records(); break;
     case Page::Settings: draw_settings(); break;
   }
   if (!storage_ok) {
@@ -1291,6 +1379,8 @@ void draw_all() {
 }
 
 void go_back() {
+  if(page==Page::StopwatchRecords){page=Page::Stopwatch;return;}
+  if(page==Page::Stopwatch){page=stopwatch_return;return;}
   if(page==Page::PageJump){page=jump_parent;return;}
   list_page = step_page = 0;
   if(page==Page::PageJump)page=jump_parent;
@@ -1728,6 +1818,8 @@ void handle_action(Action action, int arg) {
       const ConfirmKind kind = confirm_kind; confirm_kind = ConfirmKind::None;
       if (kind == ConfirmKind::Skip || kind == ConfirmKind::Early) {
         selected_run = pending_run; start_or_finish(pending_step, true);
+      } else if (kind == ConfirmKind::ResetStopwatch) {
+        if(stopwatch.reset())stopwatch_store.reset();
       } else if (kind == ConfirmKind::RestoreHistory) {
         if(alert_run>=0||voice_playing||voice_upload_active||transfer_active()){notice("请先结束提醒或传输");break;}
         const char* err=history_restore(history_selected_id,clock_ok?now_ms():0);
@@ -1762,6 +1854,21 @@ void handle_action(Action action, int arg) {
       voice_stop();
       selected_run = alert_run; start_or_finish(alert_step, true);
       alert_run = alert_step = -1; break;
+    case Action::StopwatchOpen:
+      stopwatch_return=page;page=Page::Stopwatch;break;
+    case Action::StopwatchToggle:
+      if(stopwatch.running)stopwatch.pause(esp_timer_get_time());
+      else stopwatch.start(esp_timer_get_time());
+      break;
+    case Action::StopwatchReset:
+      if(!stopwatch.running){if(stopwatch.record_count)confirm_kind=ConfirmKind::ResetStopwatch;else {stopwatch.reset();stopwatch_store.reset();}}break;
+    case Action::StopwatchRecord: {
+      const uint64_t at=esp_timer_get_time();
+      if(stopwatch_store.append(stopwatch,stopwatch.elapsed_us(at)))stopwatch.record(at);
+      else notice(stopwatch_store.error());
+      break;
+    }
+    case Action::StopwatchRecords: list_page=0;page=Page::StopwatchRecords;break;
     case Action::ClockField:
       if (arg == -1) {
         PCF85063A_Read_now(&clock_edit);
@@ -1811,7 +1918,8 @@ void handle_swipe(int delta_y) {
   const int direction = delta_y < 0 ? 1 : -1;
   int max_page = 0;
   if(page==Page::PageJump||page==Page::ResultStandards||page==Page::NumericPad||page==Page::Results||page==Page::ResultOptions||page==Page::Transfer||page==Page::HistoryField)return;
-  if(page==Page::HistoryDetail){max_page=max(0,(history_run.count+(history_has_result?history_result.group_count:0)-1)/4);}
+  if(page==Page::StopwatchRecords){max_page=max(0,(static_cast<int>(stopwatch.record_count)-1)/4);}
+  else if(page==Page::HistoryDetail){max_page=max(0,(history_run.count+(history_has_result?history_result.group_count:0)-1)/4);}
   else if(page==Page::HistoryList){int count=0;const int64_t now=now_ms();for(int i=0;i<lab.run_count;++i)if(history_is_past(lab.runs[i],now)&&(!history_date_filter||history_date_key(run_age_get(lab.runs[i].id))==history_date_filter))++count;count+=max(0,history_list(0,nullptr,0,history_date_filter));max_page=max(0,(count-1)/4);}
   else if(page==Page::ResultSummary){if(direction<0)summary_page=max(0,summary_page-1);redraw=true;return;}
   else if(page==Page::ExportSelect)max_page=max(0,(export_sample_run_count()-1)/4);
@@ -2065,6 +2173,16 @@ void serial_command() {
         }
       } else if (!strcmp(line,"guard-test")) {
         Serial.println(pocket_guard_selftest() ? "GUARD PASS 9" : "GUARD FAIL");
+      } else if (!strcmp(line,"stopwatch-test")) {
+        Serial.println(stopwatch_selftest()?"STOPWATCH PASS":"STOPWATCH FAIL");
+      } else if (!strcmp(line,"stopwatch-store-test")) {
+        bool busy=alert_run>=0||voice_playing||voice_upload_active||transfer_active()||stopwatch.running;
+        for(int i=0;i<lab.run_count;++i)busy=busy||history_run_busy(lab.runs[i],now_ms());
+        if(busy)Serial.println("STOPWATCH_STORE unavailable");
+        else Serial.println(stopwatch_store_selftest()?"STOPWATCH_STORE PASS 150_records":"STOPWATCH_STORE FAIL");
+      } else if (!strcmp(line,"stopwatch-status")) {
+        Serial.printf("STOPWATCH running=%d elapsed_ms=%llu\n",stopwatch.running,
+          static_cast<unsigned long long>(stopwatch.elapsed_us(esp_timer_get_time())/1000));
       } else if (!strcmp(line,"history-test")) {
         Serial.println(history_selftest()?"HISTORY_TEST PASS":"HISTORY_TEST FAIL");
       } else if (!strcmp(line,"history-e2e-test")) {
@@ -2322,7 +2440,7 @@ void loop() {
     sound_save_pending = false;
     if (!sound_settings_save()) notice("闹铃音量保存失败");
   }
-  const uint32_t refresh_interval = live_display_needed() ? 1000 : 60000;
+  const uint32_t refresh_interval = page==Page::Stopwatch && stopwatch.running && !screen_locked ? 100 : live_display_needed() ? 1000 : 60000;
   if (!backlight_off && (redraw || tick - last_draw_ms >= refresh_interval)) draw_all();
   delay(voice_playing || voice_upload_active ? 0 : transfer_active() ? 2 : screen_locked ? 20 : 40);
 }
