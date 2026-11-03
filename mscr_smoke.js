@@ -13,13 +13,18 @@ vm.runInContext(part('function collectResults(', ' function saveResultsDraft('),
 ctx.ensureMSCRTemplate();ctx.ensureMSCRTemplate();assert.strictEqual(ctx.db.templates.length,1);
 const template=ctx.db.templates[0];assert(ctx.isMSCR(template));assert(template.standard.includes('T 0647'));
 ctx.addRun('s',template.id,false);const r=ctx.db.runs[0],g=r.groups[0];assert.strictEqual(g.readings.length,3);assert.strictEqual(r.resultKind,'mscr');
-g.readings=['0.12','0.25','63.4'];assert(!ctx.resultsComplete(r));g.mscrRecoveryStress='3.2';assert(ctx.resultsComplete(r));
-assert.strictEqual(ctx.avg(r,g),'Jnr₀.₁ = 0.12 kPa⁻¹；Jnr₃.₂ = 0.25 kPa⁻¹；R(3.2 kPa) = 63.4 %');
-const ui=ctx.groupUI(r,g,0);assert.strictEqual((ui.match(/id="reading_/g)||[]).length,3);for(const label of ['Jnr₀.₁','Jnr₃.₂','蠕变恢复率'])assert(ui.includes(label));assert(!ui.includes('remove-reading'));assert(!ui.includes('＋增加读数'));
-let report=ctx.markdown('s');assert.strictEqual(report.split('\n').filter(l=>l.startsWith('| 试样 |')).length,3);assert(report.includes('| kPa⁻¹ | 0.12 |'));assert(report.includes('| kPa⁻¹ | 0.25 |'));assert(report.includes('| % | 63.4 |'));assert(report.includes('应力 3.2 kPa'));
-g.mscrRecoveryStress='0.1';report=ctx.markdown('s');assert(report.includes('R · 0.1 kPa 蠕变恢复率'));assert(!report.includes('R · 3.2 kPa 蠕变恢复率'));
-for(const readings of [['0','0','0'],['0.012345','0.999999','100']]){g.readings=readings.slice();assert(ctx.resultsComplete(r));ctx.markdown('s');assert.deepStrictEqual(g.readings,readings)}
-for(const readings of [['0.1','','60'],['-0.1','0.2','60'],['0.1','0.2','101'],['0.1','0.2','-1'],['0.1','0.2','NaN']]){g.readings=readings;assert(!ctx.resultsComplete(r));assert.strictEqual(ctx.avg(r,g),'—')}
+g.readings=['0.12','0.25','63.4'];g.mscrRecoveryStress='3.2';ctx.syncMSCRDiff(g);
+assert.strictEqual(g.mscrLegacyThirdValues[0].value,'63.4');assert.strictEqual(g.mscrLegacyThirdValues[0].stress,'3.2');assert.strictEqual(g.readings[2],'108.3');assert(ctx.resultsComplete(r));
+ctx.syncMSCRDiff(g);assert.strictEqual(g.mscrLegacyThirdValues.length,1);
+assert.strictEqual(ctx.avg(r,g),'Jnr₀.₁ = 0.12 kPa⁻¹；Jnr₃.₂ = 0.25 kPa⁻¹；Jnr diff = 108.3 %');
+const ui=ctx.groupUI(r,g,0);assert.strictEqual((ui.match(/id="reading_/g)||[]).length,3);for(const label of ['Jnr₀.₁','Jnr₃.₂','Jnr diff'])assert(ui.includes(label));assert(ui.includes('readonly'));assert(!ui.includes('MSCR 恢复率应力'));assert(!ui.includes('remove-reading'));assert(!ui.includes('＋增加读数'));
+let report=ctx.markdown('s');assert.strictEqual(report.split('\n').filter(l=>l.startsWith('| 试样 |')).length,3);assert(report.includes('| kPa⁻¹ | 0.12 |'));assert(report.includes('| kPa⁻¹ | 0.25 |'));assert(report.includes('| % | 108.3 |'));assert(report.includes('(0.25 − 0.12) ÷ 0.12 × 100%'));assert(!report.includes('蠕变恢复率'));assert(!report.includes('63.4'));
+for(const [low,high,expected] of [['1','1','0.0'],['1','3','200.0'],['1','0.5','-50.0'],['1','0','-100.0'],['0.1','0.151','51.0']]){g.readings=[low,high,''];assert.strictEqual(ctx.mscrDiff(g),expected);assert(ctx.resultsComplete(r));}
+for(const readings of [['0.1','',''],['-0.1','0.2',''],['0','0.2',''],['0','0',''],['0.1','-1',''],['0.1','NaN','']]){g.readings=readings;assert(!ctx.resultsComplete(r));assert.strictEqual(ctx.avg(r,g),'—')}
+// Editing the first two fields updates the stored computed field without mixing quantities.
+for(const [i,value] of ['1.02','1.2',''].entries())fields.set('reading_'+g.id+'_'+i,{value});
+ctx.collectResults(r);assert.strictEqual(g.readings[2],'17.6');assert.strictEqual(g.readings[0],'1.02');
+g.readings=['0.89','1.2',''];ctx.syncMSCRDiff(g);assert.strictEqual(g.readings[2],'34.8');
 template.name='我的蠕变试验';assert(ctx.isMSCR(template));ctx.ensureMSCRTemplate();assert.strictEqual(ctx.db.templates.length,1);
 assert(!html.includes('MSCR试验设置</button>'));assert(html.includes('ensureBBRTemplate();ensureMSCRTemplate();return'));
-console.log('MSCR distinct Jnr0.1/Jnr3.2/R fields, stress binding, completion, raw precision and export passed');
+console.log('MSCR Jnr diff calculation, live updates, zero denominator, old R retention and separate export passed');
