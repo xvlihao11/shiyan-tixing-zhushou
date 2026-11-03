@@ -428,6 +428,9 @@ void lock_display() {
 void power_tick(uint32_t now) {
   const uint32_t idle = now - last_input_ms;
   if (alert_run >= 0) { if (backlight_off) wake_display(now); return; }
+  // Keep the stopwatch visible while running; manual locking remains effective.
+  // Refresh the idle baseline so pausing grants a full 30-second idle period.
+  if (stopwatch.running) { last_input_ms = now; return; }
   if (idle >= 30000 && !backlight_off) {
     // Keep the enable output asserted; extinguish the backlight through PWM.
     // After a long low period the board controller sometimes retained IO2 low
