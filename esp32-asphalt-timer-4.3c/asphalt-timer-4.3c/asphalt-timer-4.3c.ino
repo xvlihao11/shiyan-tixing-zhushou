@@ -87,6 +87,7 @@ int pending_run = -1, pending_step = -1;
 enum class ConfirmKind : uint8_t { None, Skip, Early, DeleteSample, DeleteRun, DeleteTemplate, DeleteStep, RestoreHistory, ResetStopwatch };
 ConfirmKind confirm_kind = ConfirmKind::None;
 char entry[32] = {};
+bool replace_minutes_on_key = false;
 int project_minutes = 30;
 AgingPhase project_phase = AgingPhase::Original;
 int selected_date = -1;
@@ -1161,15 +1162,24 @@ void draw_keyboard(bool custom) {
       char mins[40]; snprintf(mins, sizeof mins, "%d 分钟", project_minutes);
       button(588, 123, 194, 41, mins, Action::ProjectMinutes, 0, BLUE);
     }
-    const int total = pinyin_total_choices();
-    for (int i = 0; i < 5 && pinyin_page * 5 + i < total; ++i) {
-      char choice[32] = {};
-      if (pinyin_choice_at(pinyin_page * 5 + i, choice))
-        button(18 + i * 111, 171, 105, 49, choice, Action::PinyinCandidate,
-               pinyin_page * 5 + i, BLUE);
+    if (editing && !pinyin_input[0] &&
+        (edit_target == EditTarget::TemplateName || edit_target == EditTarget::StepName)) {
+      static const char* type_words[] = {"针入度", "软化点", "延度", "闪点", "样品加热"};
+      static const char* step_words[] = {"样品准备", "室温冷却", "水浴", "加热", "保温"};
+      const char* const* words = edit_target == EditTarget::TemplateName ? type_words : step_words;
+      for (int i = 0; i < 5; ++i)
+        button(18 + i * 111, 171, 105, 49, words[i], Action::CommonPhrase, i, BLUE);
+    } else {
+      const int total = pinyin_total_choices();
+      for (int i = 0; i < 5 && pinyin_page * 5 + i < total; ++i) {
+        char choice[32] = {};
+        if (pinyin_choice_at(pinyin_page * 5 + i, choice))
+          button(18 + i * 111, 171, 105, 49, choice, Action::PinyinCandidate,
+                 pinyin_page * 5 + i, BLUE);
+      }
+      if (pinyin_page > 0) button(585, 171, 90, 49, "上页", Action::PinyinPrev);
+      if ((pinyin_page + 1) * 5 < total) button(682, 171, 100, 49, "下页", Action::PinyinNext);
     }
-    if (pinyin_page > 0) button(585, 171, 90, 49, "上页", Action::PinyinPrev);
-    if ((pinyin_page + 1) * 5 < total) button(682, 171, 100, 49, "下页", Action::PinyinNext);
     static const char* rows[] = {"QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"};
     for (int row = 0; row < 3; ++row) {
       const int start_x = row == 0 ? 18 : row == 1 ? 56 : 132;
@@ -1199,7 +1209,7 @@ void draw_keyboard(bool custom) {
     button(x, y, 70, 51, key, Action::Key, keys[i], KEY_BG);
   }
   if (editing) {
-    button(18, 365, 170, 44, "常用中文词", Action::CommonPhrase);
+    button(18, 365, 170, 44, "常用中文词", Action::CommonPhrase, 100);
   } else if (custom) {
     char mins[32]; snprintf(mins, sizeof mins, "等待 %d 分钟", project_minutes);
     button(18, 365, 540, 44, mins, Action::ProjectMinutes, 0, BLUE);
@@ -1679,17 +1689,17 @@ void handle_action(Action action, int arg) {
       if (selected_template < 0) break;
       edit_target = EditTarget::Minutes;
       snprintf(entry, sizeof(entry), "%d", templates.items[selected_template].steps[selected_step].minutes);
-      page = Page::EditText; break;
+      replace_minutes_on_key = true; page = Page::EditText; break;
     case Action::RunMinutes:
       if (selected_run < 0 || selected_run >= lab.run_count) break;
       edit_target = EditTarget::RunMinutes;
       selected_step = arg;
       snprintf(entry, sizeof(entry), "%d", lab.runs[selected_run].steps[selected_step].minutes);
-      page = Page::EditText; break;
+      replace_minutes_on_key = true; page = Page::EditText; break;
     case Action::ProjectMinutes:
       edit_target = EditTarget::ProjectMinutes;
       snprintf(entry, sizeof(entry), "%d", project_minutes);
-      page = Page::EditText; break;
+      replace_minutes_on_key = true; page = Page::EditText; break;
     case Action::TemplateAddStep:
       if (selected_template >= 0) {
         LabTemplate& item = templates.items[selected_template];
@@ -1723,6 +1733,12 @@ void handle_action(Action action, int arg) {
       break;
     }
     case Action::Key: {
+      if (page == Page::EditText && (edit_target == EditTarget::Minutes ||
+          edit_target == EditTarget::RunMinutes || edit_target == EditTarget::ProjectMinutes) &&
+          arg >= '0' && arg <= '9' && replace_minutes_on_key) {
+        entry[0] = 0;
+        replace_minutes_on_key = false;
+      }
       if (name_keyboard_active() && pinyin_mode && arg >= 'A' && arg <= 'Z') {
         const size_t len = strlen(pinyin_input);
         if (len + 1 < sizeof pinyin_input) {
@@ -1741,6 +1757,13 @@ void handle_action(Action action, int arg) {
       break;
     }
     case Action::Backspace: {
+      if (page == Page::EditText && (edit_target == EditTarget::Minutes ||
+          edit_target == EditTarget::RunMinutes || edit_target == EditTarget::ProjectMinutes) &&
+          replace_minutes_on_key) {
+        entry[0] = 0;
+        replace_minutes_on_key = false;
+        break;
+      }
       if (name_keyboard_active() && pinyin_mode && pinyin_input[0]) {
         pinyin_input[strlen(pinyin_input) - 1] = 0;
         pinyin_page = 0;
@@ -1772,8 +1795,8 @@ void handle_action(Action action, int arg) {
       static const char* type_names[] = {"针入度", "软化点", "延度", "闪点", "样品加热", "RTFOT 老化", "质量变化"};
       static const char* step_names[] = {"样品准备", "室温冷却", "水浴", "加热", "保温", "搅拌", "冷却", "取样", "测定与录入读数"};
       const bool type = edit_target == EditTarget::TemplateName;
-      const char* phrase = type ? type_names[phrase_index % 7] : step_names[phrase_index % 9];
-      ++phrase_index;
+      const int choice = arg == 100 ? phrase_index++ : arg;
+      const char* phrase = type ? type_names[choice % 7] : step_names[choice % 9];
       strncpy(entry, phrase, sizeof(entry) - 1); entry[sizeof(entry) - 1] = 0;
       break;
     }
