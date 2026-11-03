@@ -20,6 +20,7 @@
 #include "gt911.h"
 
 static const char *TAG = "GT911";
+static bool frame_ready=false;
 
 /* GT911 registers */
 #define ESP_LCD_TOUCH_GT911_READ_KEY_REG    (0x8093)
@@ -190,6 +191,7 @@ static esp_err_t esp_lcd_touch_gt911_exit_sleep(esp_lcd_touch_handle_t tp)
 
 static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
 {
+    frame_ready=false;
     esp_err_t err;
     uint8_t buf[41];
     uint8_t touch_cnt = 0;
@@ -238,6 +240,7 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
         touch_cnt = buf[0] & 0x0f;
         if (touch_cnt > 5 || touch_cnt == 0) {
             touch_gt911_i2c_write(tp, ESP_LCD_TOUCH_GT911_READ_XY_REG, clear);
+            if(touch_cnt==0)frame_ready=true;
             return ESP_OK;
         }
 
@@ -263,6 +266,7 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
         }
 
         portEXIT_CRITICAL(&tp->data.lock);
+        frame_ready=true;
     }
 
     return ESP_OK;
@@ -396,7 +400,9 @@ touch_gt911_point_t touch_gt911_read_point(uint8_t max_touch_cnt)
     touch_gt911_point_t data{};  // Keep the count at zero if the I2C read fails.
 
     /* Read touch data from the touch controller */
-    esp_lcd_touch_read_data(tp_handle);  // Read raw data from the touch controller
+    const esp_err_t result=esp_lcd_touch_read_data(tp_handle);
+    if(result!=ESP_OK)return data;
+    data.fresh=frame_ready;
 
     /* Get the touch coordinates and count of touch points */
     esp_lcd_touch_get_coordinates(tp_handle, data.x, data.y, NULL, &data.cnt, max_touch_cnt);

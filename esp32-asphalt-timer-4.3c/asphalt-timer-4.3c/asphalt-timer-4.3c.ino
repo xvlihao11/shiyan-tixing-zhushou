@@ -18,6 +18,7 @@
 #include "src/pocket_guard.hpp"
 #include "src/stopwatch.hpp"
 #include "src/stopwatch_store.hpp"
+#include "src/record_press.hpp"
 #include "src/tf_records.hpp"
 #include "src/result_store.hpp"
 #include "src/transfer.hpp"
@@ -57,7 +58,7 @@ enum class Action : uint8_t {
   TransferStart, TransferStop, TransferQR, MobileShare, StandardChoose, StandardCustom, JumpOpen, JumpKey, JumpGo,
   ExportDateOpen, ExportSampleOpen, ExportDateToggle, ExportSampleToggle, ExportRoot,
   HistoryOpen, HistoryItemOpen, HistoryRestore, HistoryExport, HistoryDateOpen, HistoryDateKey, HistoryDateApply, HistoryAll, HistoryFieldOpen, HistoryExportRow,
-  StopwatchOpen, StopwatchToggle, StopwatchReset, StopwatchRecord, StopwatchRecords
+  StopwatchOpen, StopwatchToggle, StopwatchReset, StopwatchRecord, StopwatchRecords, StopwatchPrimary
 };
 // Archive, NVS and TF operations may nest; leave headroom for their call chains.
 SET_LOOP_TASK_STACK_SIZE(20480);
@@ -67,6 +68,14 @@ int hit_count = 0;
 Page page = Page::Dashboard;
 Stopwatch stopwatch;
 StopwatchStore stopwatch_store;
+RecordPress record_press;
+uint32_t record_flash_until=0;
+bool record_flash_failed=false;
+bool record_flash_started=false,record_flash_resumed=false;
+bool record_audio_open=false;
+int record_tone_remaining=0,record_tone_phase=0;
+uint32_t record_audio_mute_at=0;
+uint32_t record_audio_test_until=0;
 Page stopwatch_return = Page::Settings;
 int selected_sample = -1, selected_run = -1, selected_template = -1;
 int selected_step = 0, list_page = 0, step_page = 0;
@@ -449,6 +458,7 @@ void audio_begin() {
 }
 
 bool audio_open(int volume) {
+  if(record_audio_open){record_audio_open=false;record_tone_remaining=0;esp_codec_dev_close(play_device);speaker_audio_poweramp_enable(false);}
   audio_begin();
   if (!audio_ready) return false;
   esp_codec_dev_sample_info_t sample_info{};
@@ -541,6 +551,35 @@ void beep(int ms, int frequency = 880) {
     if (result != ESP_OK) { Serial.printf("speaker write failed: %d\n", result); break; }
   }
   audio_close();
+}
+
+// Feed the short acknowledgement in small chunks, without beep()'s blocking drain.
+void record_feedback_tick(uint32_t tick) {
+  const bool wanted=((page==Page::Stopwatch&&!screen_locked&&!backlight_off)||(record_audio_test_until&&int32_t(tick-record_audio_test_until)<0))&&alert_run<0&&!voice_playing&&!voice_upload_active;
+  if(!wanted){
+    record_tone_remaining=0;
+    if(record_audio_open){record_audio_open=false;record_tone_remaining=0;esp_codec_dev_close(play_device);speaker_audio_poweramp_enable(false);}
+    return;
+  }
+  if(!record_audio_open){
+    static uint32_t retry_at=0;if(int32_t(tick-retry_at)<0)return;
+    if(!audio_open(65)){retry_at=tick+3000;return;}
+    retry_at=0;
+    record_audio_open=true;
+    int16_t silent[128*2]={};esp_codec_dev_write(play_device,silent,sizeof silent);
+    speaker_audio_poweramp_enable(false);
+  }
+  if(record_tone_remaining>0){
+    if(record_tone_phase==0)speaker_audio_poweramp_enable(true);
+    int16_t samples[128*2];const int n=min(128,record_tone_remaining);
+    for(int i=0;i<n;++i){const int16_t v=((record_tone_phase++*2000*2/44100)&1)?6000:-6000;samples[2*i]=samples[2*i+1]=v;}
+    if(esp_codec_dev_write(play_device,samples,n*4)!=ESP_OK){record_tone_remaining=0;Serial.println("RECORD_BEEP failed");}
+    else record_tone_remaining-=n;
+    record_audio_mute_at=millis()+80;
+    if(!record_tone_remaining){int16_t silent[128*2]={};esp_codec_dev_write(play_device,silent,sizeof silent);Serial.println("RECORD_BEEP queued");}
+  }else if(record_audio_mute_at&&int32_t(tick-record_audio_mute_at)>=0){
+    record_audio_mute_at=0;speaker_audio_poweramp_enable(false);
+  }
 }
 
 void alarm_melody() {
@@ -1218,7 +1257,7 @@ void draw_stopwatch_digits(const char* text) {
   int width=0;
   for(const char* p=text;*p;++p)width+=(*p==':'?18:*p=='.'?12:42)+8;
   int x=(W-width+8)/2;
-  constexpr int y=111;
+  constexpr int y=92;
   for(const char* p=text;*p;++p) {
     if(*p==':'){box(x+5,y+20,7,7,CYAN);box(x+5,y+48,7,7,CYAN);x+=26;}
     else if(*p=='.'){box(x+2,y+65,7,7,CYAN);x+=20;}
@@ -1244,21 +1283,27 @@ void draw_stopwatch() {
   const uint64_t cs=stopwatch.elapsed_us(esp_timer_get_time())/10000;
   char text[40];
   stopwatch_format(stopwatch.elapsed_us(esp_timer_get_time()),text,sizeof text);
-  box(20,90,760,120,CARD);
+  box(20,76,760,108,CARD);
   draw_stopwatch_digits(text);
-  centered(20,218,760,"时 : 分 : 秒 . 百分秒",MUTED);
+  centered(20,190,760,"时 : 分 : 秒 . 百分秒",MUTED);
   if(stopwatch.record_count){
     char interval[40],latest[96];stopwatch_format(stopwatch.interval_us(stopwatch.record_count-1),interval,sizeof interval);
     snprintf(latest,sizeof latest,"第 %lu 次记录 · 本段 %s",static_cast<unsigned long>(stopwatch.record_count),interval);
-    centered(20,260,760,latest,CYAN);
-  }else centered(20,260,760,"点击记录保存累计时间与分段用时",MUTED);
-  button(20,310,240,60,stopwatch.running?"暂停":cs?"继续":"开始",
-         Action::StopwatchToggle,0,stopwatch.running?ORANGE:GREEN);
-  if(stopwatch.running)button(280,310,240,60,"记录",Action::StopwatchRecord,0,BLUE);
-  else centered(280,330,240,"开始后可记录",MUTED);
-  if(!stopwatch.running)button(540,310,240,60,"清零",Action::StopwatchReset,0,BLUE);
-  else centered(540,330,240,"暂停后可清零",MUTED);
-  centered(20,389,760,stopwatch_store.saved(stopwatch.record_count)?"记录已存TF卡；锁屏继续；重启秒表清零":"无TF卡时暂存100条；锁屏继续；重启清零",MUTED);
+    centered(20,226,760,latest,CYAN);
+  }else centered(20,226,760,"按下记录，保存累计时间与分段用时",MUTED);
+  if(stopwatch.running)button(20,380,200,38,"暂停",Action::StopwatchToggle,0,ORANGE);
+  else centered(20,387,200,cs?"已暂停":"尚未开始",MUTED);
+  char caption[64];snprintf(caption,sizeof caption,stopwatch.running?"记录（按下即记录）":cs?"继续计时":"开始计时");
+  if(record_flash_until){
+    if(record_flash_failed)snprintf(caption,sizeof caption,"保存失败，请检查提示");
+    else if(record_flash_started)snprintf(caption,sizeof caption,record_flash_resumed?"已继续，再按记录":"已开始，再按记录");
+    else snprintf(caption,sizeof caption,"已记录 第 %lu 条",static_cast<unsigned long>(stopwatch.record_count));
+  }
+  button(kRecordX,kRecordY,kRecordW,kRecordH,caption,Action::StopwatchPrimary,0,record_flash_until?(record_flash_failed?RED:GREEN):stopwatch.running?BLUE:GREEN);
+  if(stopwatch.running){
+    centered(580,387,200,"暂停后可清零",MUTED);
+  }else button(580,380,200,38,"清零",Action::StopwatchReset,0,BLUE);
+  centered(230,387,340,stopwatch_store.saved(stopwatch.record_count)?"记录已保存到TF卡":"无卡最多暂存100条",MUTED);
   nav();
 }
 
@@ -1822,7 +1867,7 @@ void handle_action(Action action, int arg) {
       if (kind == ConfirmKind::Skip || kind == ConfirmKind::Early) {
         selected_run = pending_run; start_or_finish(pending_step, true);
       } else if (kind == ConfirmKind::ResetStopwatch) {
-        if(stopwatch.reset())stopwatch_store.reset();
+        if(stopwatch.reset()){stopwatch_store.reset();record_flash_until=0;}
       } else if (kind == ConfirmKind::RestoreHistory) {
         if(alert_run>=0||voice_playing||voice_upload_active||transfer_active()){notice("请先结束提醒或传输");break;}
         const char* err=history_restore(history_selected_id,clock_ok?now_ms():0);
@@ -1860,17 +1905,14 @@ void handle_action(Action action, int arg) {
     case Action::StopwatchOpen:
       stopwatch_return=page;page=Page::Stopwatch;break;
     case Action::StopwatchToggle:
+      record_flash_until=0;
       if(stopwatch.running)stopwatch.pause(esp_timer_get_time());
       else stopwatch.start(esp_timer_get_time());
       break;
     case Action::StopwatchReset:
       if(!stopwatch.running){if(stopwatch.record_count)confirm_kind=ConfirmKind::ResetStopwatch;else {stopwatch.reset();stopwatch_store.reset();}}break;
-    case Action::StopwatchRecord: {
-      const uint64_t at=esp_timer_get_time();
-      if(stopwatch_store.append(stopwatch,stopwatch.elapsed_us(at)))stopwatch.record(at);
-      else notice(stopwatch_store.error());
-      break;
-    }
+    case Action::StopwatchPrimary:
+    case Action::StopwatchRecord: break; // Dedicated down-edge path; never count release twice.
     case Action::StopwatchRecords: list_page=0;page=Page::StopwatchRecords;break;
     case Action::ClockField:
       if (arg == -1) {
@@ -1906,6 +1948,26 @@ void handle_action(Action action, int arg) {
     default: break;
   }
   redraw = true;
+}
+
+void stopwatch_record_at(uint64_t at) {
+  const uint32_t began=millis();
+  record_flash_started=false;
+  record_flash_failed=!stopwatch_store.append(stopwatch,stopwatch.elapsed_us(at));
+  if(!record_flash_failed){
+    stopwatch.record(at);record_tone_remaining=2205;record_tone_phase=0;
+    Serial.printf("STOPWATCH_RECORD id=%lu total_us=%llu save_ms=%lu\n",static_cast<unsigned long>(stopwatch.record_count),static_cast<unsigned long long>(stopwatch.elapsed_us(at)),static_cast<unsigned long>(millis()-began));
+  }else {notice(stopwatch_store.error());Serial.printf("STOPWATCH_RECORD failed=%s\n",stopwatch_store.error());}
+  record_flash_until=millis()+500;redraw=true;
+}
+
+void stopwatch_primary_at(uint64_t at) {
+  if(stopwatch.running){stopwatch_record_at(at);return;}
+  record_flash_resumed=stopwatch.elapsed_us(at)>0;
+  stopwatch.start(at);
+  record_flash_started=true;record_flash_failed=false;record_flash_until=millis()+500;
+  record_tone_remaining=2205;record_tone_phase=0;redraw=true;
+  Serial.printf("STOPWATCH_START resumed=%d\n",record_flash_resumed);
 }
 
 void handle_touch(int x, int y) {
@@ -2178,6 +2240,10 @@ void serial_command() {
         Serial.println(pocket_guard_selftest() ? "GUARD PASS 9" : "GUARD FAIL");
       } else if (!strcmp(line,"stopwatch-test")) {
         Serial.println(stopwatch_selftest()?"STOPWATCH PASS":"STOPWATCH FAIL");
+      } else if (!strcmp(line,"record-press-test")) {
+        Serial.println(record_press_selftest()?"RECORD_PRESS PASS":"RECORD_PRESS FAIL");
+      } else if (!strcmp(line,"record-beep-test")) {
+        if(!voice_playing&&alert_run<0){record_audio_test_until=millis()+500;record_tone_remaining=2205;record_tone_phase=0;Serial.println("RECORD_BEEP test_started");}
       } else if (!strcmp(line,"stopwatch-store-test")) {
         bool busy=alert_run>=0||voice_playing||voice_upload_active||transfer_active()||stopwatch.running;
         for(int i=0;i<lab.run_count;++i)busy=busy||history_run_busy(lab.runs[i],now_ms());
@@ -2364,9 +2430,14 @@ void loop() {
   transfer_tick();
   if(page==Page::Transfer && tick-last_draw_ms>=1000)redraw=true;
   static uint32_t last_touch_poll=0;
-  if(tick-last_touch_poll>=uint32_t(screen_locked?20:40)) {
+  const bool quick_record=page==Page::Stopwatch&&!screen_locked&&!backlight_off;
+  if(tick-last_touch_poll>=uint32_t(quick_record?10:screen_locked?20:40)) {
   last_touch_poll=tick;
   touch_gt911_point_t point=touch_gt911_read_point(2);
+  const uint64_t touch_at=esp_timer_get_time();
+  const bool record_enabled=quick_record&&alert_run<0&&confirm_kind==ConfirmKind::None;
+  if(record_press.observe(point.fresh,point.cnt,point.cnt?point.x[0]:0,point.cnt?point.y[0]:0,record_enabled))stopwatch_primary_at(touch_at);
+  if(point.fresh||!quick_record) {
   const bool pressed=point.cnt>0;
   if (screen_locked || backlight_off) {
     // Interrupts, taps, long contact and pocket movement never directly wake.
@@ -2403,7 +2474,11 @@ void loop() {
     touch_down=pressed && point.cnt==1;
   }
 
-  } // Touch cadence is independent of the 2ms network service loop.
+  } // On the stopwatch, a missing frame is not a release.
+  } // Touch cadence is independent of the network/audio service loop.
+
+  if(record_flash_until&&int32_t(tick-record_flash_until)>=0){record_flash_until=0;redraw=true;}
+  record_feedback_tick(millis());
 
   if (wake_reassert_ms && static_cast<int32_t>(tick - wake_reassert_ms) >= 0) {
     wake_reassert_ms = 0;
@@ -2445,5 +2520,5 @@ void loop() {
   }
   const uint32_t refresh_interval = page==Page::Stopwatch && stopwatch.running && !screen_locked ? 100 : live_display_needed() ? 1000 : 60000;
   if (!backlight_off && (redraw || tick - last_draw_ms >= refresh_interval)) draw_all();
-  delay(voice_playing || voice_upload_active ? 0 : transfer_active() ? 2 : screen_locked ? 20 : 40);
+  delay(voice_playing || voice_upload_active ? 0 : record_tone_remaining>0 ? 1 : quick_record ? 2 : transfer_active() ? 2 : screen_locked ? 20 : 40);
 }

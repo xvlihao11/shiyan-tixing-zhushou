@@ -48,6 +48,7 @@ typedef struct {
     uint16_t x[ESP_LCD_TOUCH_MAX_POINTS];  /*!< X coordinates of touch points */
     uint16_t y[ESP_LCD_TOUCH_MAX_POINTS];  /*!< Y coordinates of touch points */
     uint8_t cnt;                          /*!< Number of detected touch points */
+    bool fresh;                          /*!< A controller frame, including an explicit lift */
 } touch_gt911_point_t;
 
 /**
