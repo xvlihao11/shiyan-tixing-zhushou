@@ -467,6 +467,12 @@ bool audio_open(int volume) {
   sample_info.sample_rate = 44100;
   const int opened = esp_codec_dev_open(play_device, &sample_info);
   if (opened != ESP_OK) { Serial.printf("speaker open failed: %d\n", opened); return false; }
+  // Preserve the normal range; give the upper end a modest 3 dB boost.
+  // The ES8311 has hardware gain headroom, but higher levels may distort a small speaker.
+  esp_codec_dev_vol_map_t points[] = {{0, -50.0f}, {80, -10.0f}, {100, 3.0f}};
+  esp_codec_dev_vol_curve_t curve{points, 3};
+  const int curve_result = esp_codec_dev_set_vol_curve(play_device, &curve);
+  if (curve_result != ESP_OK) Serial.printf("speaker volume curve failed: %d\n", curve_result);
   const int volume_result = esp_codec_dev_set_out_vol(play_device, volume);
   if (volume_result != ESP_OK) Serial.printf("speaker volume failed: %d\n", volume_result);
   speaker_audio_poweramp_enable(true);
