@@ -3,7 +3,7 @@
 
 用户报告语音播报后无法右滑解锁。最新普通触摸改成只推进GT911 fresh帧后，原PocketGuard仍要求零接触发生在最后按下帧160ms之后：控制器的唯一松手帧通常只晚约20ms，返回false且不清理手势，随后没有新松手帧便无法完成解锁。现只接收控制器确认的新帧，收到明确抬手就立即评估并重置手势；不依赖空轮询补一次假松手。保留单指、左侧起点、右侧终点、至少480像素、至少4点、至少180ms、纵向偏移及反向移动限制，解锁尾帧仍不传递给页面按钮。
 
-PocketGuard自检由9组扩展为13组，新增即时松手、两段短滑不能拼接、无效接触之后再次完整滑动、即时松手跨millis回绕。只改pocket_guard.hpp和自检报告行，保留最新普通页面触摸、输入优化、音量曲线和20MHz RGB配置。已编译，仅写app0并通过写入校验。固件1,943,824字节，SHA256为13450f18540b740012f12913e75251f6fb1d5e8fb7c21ce5d9d404e838b7741b。实机GUARD PASS 13、RECORD_PRESS PASS；启动samples=2、runs=3、templates=9、generation=125、storage=1、rtc=1、voice_sd=1。三个项目的开始/完成/跳过时间逐条与更新前匹配。重放已完成项目37的语音，VOICE_PLAY started/stopped后正常锁屏，未改任何试验步骤。用户语音后右滑实测待确认。原应用与timer_nvs备份在本机 C:\ESP32-4.3C\backups\2026-11-04-unlock，均与设备读回校验一致。
+PocketGuard自检由9组扩展为13组，新增即时松手、两段短滑不能拼接、无效接触之后再次完整滑动、即时松手跨millis回绕。只改pocket_guard.hpp和自检报告行，保留最新普通页面触摸、输入优化、音量曲线和20MHz RGB配置。已编译，仅写app0并通过写入校验。固件1,943,824字节，SHA256为13450f18540b740012f12913e75251f6fb1d5e8fb7c21ce5d9d404e838b7741b。实机GUARD PASS 13、RECORD_PRESS PASS；启动samples=2、runs=3、templates=9、generation=125、storage=1、rtc=1、voice_sd=1。三个项目的开始/完成/跳过时间逐条与更新前匹配。重放已完成项目37的语音，VOICE_PLAY started/stopped后正常锁屏，未改任何试验步骤。用户已实测确认：测试语音播完后，从左侧完整右滑并松手，可以亮屏解锁并正常操作；串口记录到UNLOCK swipe。原应用与timer_nvs备份在本机 C:\ESP32-4.3C\backups\2026-11-04-unlock，均与设备读回校验一致。
 
 ## 2026-11-03 名称与时间输入简化
 
