@@ -1,0 +1,25 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+let serial=0,stored='';const messages=[],ctx={db:{templates:[],samples:[],runs:[],yieldObservations:[{id:'legacy',yieldPct:62,pen:60}]},KEY:'test',localStorage:{setItem:(k,v)=>stored=v},uid:()=> 'id'+(++serial),render(){},alert:m=>messages.push(m),confirm:()=>true,esc:x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),yieldValid:(n,min,max)=>Number.isFinite(n)&&n>=min&&n<=max,yieldFmt:n=>Number(n).toFixed(2).replace(/\.?0+$/,'')};
+vm.createContext(ctx);for(const file of ['yield_local.js','oil_evaluation.js'])vm.runInContext(fs.readFileSync(__dirname+'/app/assets/'+file,'utf8'),ctx);
+ctx.ensureOilEvaluationData();const before=JSON.stringify(ctx.db.yieldObservations),d=ctx.db.yieldOilDraft;
+d.newOilName='母油 A';d.newOilBatch='批次1';ctx.addEvaluationOil();const a=ctx.db.yieldOilLibrary[0].id;
+d.newOilName='调配油 B';d.newOilBatch='批次2';ctx.addEvaluationOil();const b=ctx.db.yieldOilLibrary[1].id;
+const add=(oilId,yieldPct,pen,condition='25℃/方案A')=>{Object.assign(d,{evalOil:oilId,evalYield:String(yieldPct),evalPen:String(pen),evalCondition:condition});ctx.saveOilEvaluation()};
+add(a,40.83,42);add(a,42.83,70);add(b,20,100);add(a,50,80,'其他条件');assert.strictEqual(ctx.db.yieldOilEvaluations.length,4);
+add(a,40.83,42);assert.strictEqual(ctx.db.yieldOilEvaluations.length,4);
+const r=ctx.oilRecipe(a,b,90,'25℃/方案A');assert(r);assert.strictEqual(r.key,ctx.oilRecipe(b,a,10,'25℃/方案A').key);
+assert.notStrictEqual(r.key,ctx.oilRecipe(a,b,85,'25℃/方案A').key);assert.notStrictEqual(r.key,ctx.oilRecipe(a,b,90,'其他条件').key);
+assert.strictEqual(ctx.oilRecipe(a,a,90,'25℃/方案A'),null);assert.strictEqual(ctx.oilRecipe(a,b,101,'25℃/方案A'),null);
+assert.strictEqual(ctx.oilMixtureReferences(r).length,0);assert(ctx.oilMeasuredCurve(ctx.oilMixtureReferences(r)).error);
+Object.assign(d,{oilA:a,oilB:b,shareA:'90',mixCondition:'25℃/方案A',mixYield:'41',mixPen:'45'});ctx.saveOilMixture();assert.strictEqual(ctx.db.yieldOilMixtures.length,1);
+Object.assign(d,{mixYield:'43',mixPen:'65'});ctx.saveOilMixture();assert.strictEqual(ctx.db.yieldOilMixtures.length,2);
+const rows=ctx.oilMixtureReferences(r),curve=ctx.oilMeasuredCurve(rows);assert.strictEqual(rows.length,2);assert.strictEqual(ctx.yieldLocalInterpolate(curve.points,'p',55,'y'),42);
+assert.strictEqual(ctx.yieldLocalInterpolate(curve.points,'p',70,'y'),null);assert.strictEqual(ctx.oilMixtureReferences(ctx.oilRecipe(a,b,85,'25℃/方案A')).length,0);
+const pure=ctx.oilRecipe(a,'',100,'25℃/方案A');assert(pure);assert.strictEqual(ctx.oilMixtureReferences(pure).length,2);assert(Math.abs(ctx.yieldLocalInterpolate(ctx.oilMeasuredCurve(ctx.oilMixtureReferences(pure)).points,'p',68,'y')-42.687142857)<1e-8);
+Object.assign(d,{targetPen:'55'});ctx.openOilWorkspace('blend');let ui=ctx.oilWorkspaceUI();assert(ui.includes('母油 A'));assert(ui.includes('调配油 B'));assert(ui.includes('42%'));assert(ui.includes('原料 A 单油评价'));assert(ui.includes('原料 B 单油评价'));assert(ui.includes('混配实测'));assert(ui.includes('不直接按比例平均'));
+ctx.openOilWorkspace('library');ui=ctx.oilWorkspaceUI();assert(ui.includes('记录单油评价'));assert(ui.includes('40.83'));assert.strictEqual(JSON.stringify(ctx.db.yieldObservations),before);
+// Full backup validation and merge keep both single-oil and mixture data.
+const backup=fs.readFileSync(__dirname+'/app/assets/backup_full.js','utf8');vm.runInContext(backup.slice(backup.indexOf('function fullSafe('),backup.indexOf('function fullBytesToBase64(')),ctx);vm.runInContext(backup.match(/function fullMerge\([^\n]+/)[0],ctx);
+const restored=ctx.fullValidateDB(JSON.parse(stored));assert.strictEqual(restored.yieldOilLibrary.length,2);assert.strictEqual(restored.yieldOilEvaluations.length,4);assert.strictEqual(restored.yieldOilMixtures.length,2);
+const merged=ctx.fullMerge({yieldOilLibrary:[{id:'other',name:'其他油'}]},restored);assert.strictEqual(merged.yieldOilLibrary.length,3);assert.strictEqual(merged.yieldOilMixtures.length,2);
+console.log('Single-oil evaluation library, mixture records, ratio/condition isolation, measured references and backup roundtrip passed');

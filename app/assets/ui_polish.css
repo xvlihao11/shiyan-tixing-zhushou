@@ -596,3 +596,5 @@ body.has-wallpaper,.has-wallpaper .trial-wallpaper{background:#153d59}
 }
 
 .bbr-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.bbr-pair label{min-width:0}.bbr-specimen{margin-top:10px}.bbr-pair input{font-variant-numeric:tabular-nums}
+
+.oil-data-scroll{overflow-x:auto;max-width:100%}.oil-data-table{border-collapse:collapse;width:100%;font-size:13px}.oil-data-table th,.oil-data-table td{padding:7px;text-align:left;border-bottom:1px solid #a3c9d044;white-space:nowrap}.oil-data-table button{font-size:12px;min-height:30px;padding:4px 7px}
