@@ -2266,7 +2266,7 @@ void serial_command() {
           for (int s=0;s<run.count;++s) Serial.printf(" STEP index=%d started=%lld done=%lld skipped=%lld\n",s,run.steps[s].started,run.steps[s].done,run.steps[s].skipped);
         }
       } else if (!strcmp(line,"guard-test")) {
-        Serial.println(pocket_guard_selftest() ? "GUARD PASS 9" : "GUARD FAIL");
+        Serial.println(pocket_guard_selftest() ? "GUARD PASS 13" : "GUARD FAIL");
       } else if (!strcmp(line,"stopwatch-test")) {
         Serial.println(stopwatch_selftest()?"STOPWATCH PASS":"STOPWATCH FAIL");
       } else if (!strcmp(line,"record-press-test")) {

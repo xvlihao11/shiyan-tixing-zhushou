@@ -2,14 +2,15 @@
 #include <stdint.h>
 
 // Screen-coordinate gesture gate, independent of GPIO and display state.
-// An unlock is emitted only after a deliberate left-to-right swipe is released.
+// observe() receives confirmed controller frames only. An unlock is emitted
+// on the explicit lift after a deliberate left-to-right swipe.
 class PocketGuard {
  public:
   bool tracking() const { return active_; }
   void reset() { *this=PocketGuard{}; }
   bool observe(uint8_t contacts,int x,int y,uint32_t tick) {
     if (!contacts) {
-      if (!active_ || static_cast<uint32_t>(tick-last_)<160) return false;
+      if (!active_) return false;
       const bool unlock=valid_ && points_>=4 && start_x_<=160 && last_x_>=640 &&
         last_x_-start_x_>=480 && static_cast<uint32_t>(last_-start_)>=180 &&
         static_cast<uint32_t>(tick-start_)<=2400;
@@ -48,5 +49,20 @@ inline bool pocket_guard_selftest() {
   g.observe(1,80,220,10000);g.observe(1,500,220,10100);g.observe(1,200,220,10200);g.observe(1,720,220,10300);if(g.observe(0,0,0,10500))return false; // Reversal.
   const uint32_t base=0xffffff00u;
   for(int i=0;i<5;++i)g.observe(1,80+i*160,220,base+static_cast<uint32_t>(i*80));
-  return g.observe(0,0,0,base+500u); // millis rollover.
+  if(!g.observe(0,0,0,base+500u))return false; // millis rollover.
+  // Fresh-only input: the one lift frame arrives immediately after the swipe.
+  for(int i=0;i<5;++i)g.observe(1,80+i*160,220,11000+i*80);
+  if(!g.observe(0,0,0,11340))return false;
+  // Separate contacts must not be stitched into a long swipe.
+  for(int i=0;i<5;++i)g.observe(1,80+i*70,220,12000+i*80);
+  if(g.observe(0,0,0,12340)||g.tracking())return false;
+  for(int i=0;i<5;++i)g.observe(1,380+i*85,220,12400+i*80);
+  if(g.observe(0,0,0,12740)||g.tracking())return false;
+  // A rejected short contact cannot leave later valid gestures stuck.
+  g.observe(1,80,220,13000);if(g.observe(0,0,0,13020)||g.tracking())return false;
+  for(int i=0;i<5;++i)g.observe(1,80+i*160,220,13100+i*80);
+  if(!g.observe(0,0,0,13440))return false;
+  // Immediate lift remains valid across the millis rollover.
+  for(int i=0;i<5;++i)g.observe(1,80+i*160,220,base+static_cast<uint32_t>(i*80));
+  return g.observe(0,0,0,base+340u);
 }
