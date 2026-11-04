@@ -1,6 +1,6 @@
 // Interpolate only measured cuts from the current feedstock batch and grade.
 function yieldLocalCurve(grade,batch,pen,yieldPct){
-  const formulation=yieldFormulation();if(!formulation)return {error:'填写调配油标识与母油质量占比（例如 90、85、80），本模型收率以母油＋调配油总投料质量为分母。'};
+  const formulation=yieldFormulation();if(!formulation)return {error:'填写母油质量占比（100、90、85、80 或其他比例）；不足 100% 时还需填写调配油标识，本模型收率以母油＋调配油总投料质量为分母。'};
   const selected=db.yieldObservations.filter(o=>yieldSelected.has(o.id));
   const records=selected.filter(o=>o.type==='cut'&&o.grade===grade&&String(o.batch||'').trim()===batch&&yieldSameFormulation(o,formulation));
   const points=records.filter(o=>yieldValid(+o.yieldPct,.01,100)&&yieldValid(+o.pen,.01,1000)).map(o=>({y:+o.yieldPct,p:+o.pen}));

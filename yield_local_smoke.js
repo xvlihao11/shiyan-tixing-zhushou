@@ -37,4 +37,10 @@ delete ctx.db.yieldObservations[1].yieldBasis;delete ctx.db.yieldObservations[1]
 ctx.confirm=()=>true;ctx.save=()=>{};ctx.alert=()=>{};
 ctx.tagYieldObservation('b');assert.strictEqual(ctx.db.yieldObservations[1].pen,70);assert.strictEqual(ctx.db.yieldObservations[1].yieldPct,42.83);assert.strictEqual(ctx.db.yieldObservations[1].motherPct,90);assert(ctx.db.yieldObservations[1].formulationHistory.length);assert(resultText.includes('42.69%'));
 set('calcMotherPct','');ctx.calculateYield();assert(resultText.includes('填写调配油标识'));set('calcMotherPct','101');ctx.calculateYield();assert(resultText.includes('填写调配油标识'));
+// Pure mother oil needs no blend identity; historical irrelevant blend text is ignored.
+set('calcMotherPct','100');set('calcBlendOil','');assert.strictEqual(ctx.yieldFormulation().blendOil,'');
+ctx.db.yieldObservations.push({...observations[0],id:'pure-a',motherPct:100,blendOil:''},{...observations[1],id:'pure-b',motherPct:100,blendOil:''});vm.runInContext("yieldSelected.add('pure-a');yieldSelected.add('pure-b')",ctx);
+curve=ctx.yieldLocalCurve('G','NEW',42,40.83);assert.strictEqual(curve.points.length,2);ctx.calculateYield();assert(resultText.includes('42.69%'));assert(resultText.includes('纯母油 100%'));
+set('calcBlendOil','旧调配油输入');ctx.rememberYieldInput({id:'calcMotherPct',value:'100'});assert.strictEqual(fields.get('calcBlendOil').disabled,true);assert.strictEqual(ctx.yieldFormulation().blendOil,'');assert.strictEqual(ctx.yieldLocalCurve('G','NEW',42,40.83).points.length,2);
+set('calcMotherPct','90');ctx.rememberYieldInput({id:'calcMotherPct',value:'90'});assert.strictEqual(fields.get('calcBlendOil').disabled,false);set('calcBlendOil','');assert.strictEqual(ctx.yieldFormulation(),null);
 console.log('Formulation-specific curves, total-feed yield basis, ratio/blend isolation and explicit legacy annotation passed');
