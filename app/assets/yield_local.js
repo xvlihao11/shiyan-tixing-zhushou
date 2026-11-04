@@ -1,13 +1,14 @@
 // Interpolate only measured cuts from the current feedstock batch and grade.
 function yieldLocalCurve(grade,batch,pen,yieldPct){
+  const formulation=yieldFormulation();if(!formulation)return {error:'填写调配油标识与母油质量占比（例如 90、85、80），本模型收率以母油＋调配油总投料质量为分母。'};
   const selected=db.yieldObservations.filter(o=>yieldSelected.has(o.id));
-  const records=selected.filter(o=>o.type==='cut'&&o.grade===grade&&String(o.batch||'').trim()===batch);
+  const records=selected.filter(o=>o.type==='cut'&&o.grade===grade&&String(o.batch||'').trim()===batch&&yieldSameFormulation(o,formulation));
   const points=records.filter(o=>yieldValid(+o.yieldPct,.01,100)&&yieldValid(+o.pen,.01,1000)).map(o=>({y:+o.yieldPct,p:+o.pen}));
   points.push({y:yieldPct,p:pen});points.sort((a,b)=>a.y-b.y);
   const unique=[];
   for(const point of points){const last=unique.at(-1);if(last&&Math.abs(last.y-point.y)<1e-8){if(Math.abs(last.p-point.p)>1e-8)return {error:'本批同一收率对应不同针入度，请核对重复记录及本次初始点，确认后再计算。'};continue}unique.push(point)}
   for(let i=1;i<unique.length;i++)if(unique[i].p<=unique[i-1].p)return {error:'本批实测点未呈现收率增加、针入度增加的趋势，请核对母油批次和试验条件，暂不生成插值结果。'};
-  if(unique.length<2)return {error:'本批至少需要两个不同收率的实测点（可包括本次初始点）。请保存并勾选同牌号、同母油批次的实测记录。'};
+  if(unique.length<2)return {error:'本批至少需要两个不同收率的实测点（可包括本次初始点）。请保存并勾选同牌号、同母油、同调配油、同配比并按总投料计算收率的实测记录。'};
   return {points:unique,ignored:selected.length-records.length};
 }
 function yieldLocalInterpolate(points,input,value,output){
@@ -24,7 +25,7 @@ function calculateLocalYield(){
   if(Number.isFinite(target)&&center===null)return yieldError(`目标针入度超出本批已测 ${yieldFmt(first.p)}～${yieldFmt(last.p)} 范围，请补测相邻收率点；本次不向范围外推算。`);
   yieldSuggestedRange=[first.y,last.y];
   const prior=Number(yieldDraft.chosenYield),chosen=center??(yieldDraft.chosenYield!==''&&Number.isFinite(prior)&&prior>=first.y&&prior<=last.y?prior:y);
-  get('yieldResult').innerHTML=`<div class="yield-result"><p><strong>${center===null?'本批实测曲线':`目标 ${esc(yieldFmt(target))} 针 · 估算收率 ${esc(yieldFmt(center))}%`}</strong></p><p>按 ${esc(yieldGrade)} / ${esc(batch)} 的 ${curve.points.length} 个点作区间内线性插值。可用收率 ${yieldFmt(first.y)}%～${yieldFmt(last.y)}%，对应针入度 ${yieldFmt(first.p)}～${yieldFmt(last.p)}。</p><p>${curve.points.map(o=>`${yieldFmt(o.y)}% → ${yieldFmt(o.p)} 针`).map(esc).join('；')}</p><label>选定切割收率（%）<input id="chosenYield" type="number" step="any" min="${first.y}" max="${last.y}" value="${esc(yieldFmt(chosen))}" oninput="rememberYieldInput(this);updateYieldChoice()"></label><div id="yieldChoice"></div><p class="muted">${curve.ignored?`已排除 ${curve.ignored} 条其他母油批次、其他牌号或掺蜡记录。`:''}请保持同批原料、相同针入度试验及取样条件；少量点仅提供局部估算，目标点仍需小样验证。本结果用于切割收率估算，不换算蜡油掺量。</p></div>`;
+  get('yieldResult').innerHTML=`<div class="yield-result"><p><strong>${center===null?'本批实测曲线':`目标 ${esc(yieldFmt(target))} 针 · 估算收率 ${esc(yieldFmt(center))}%`}</strong></p><p>${esc(yieldFormulationLabel(yieldFormulation()))}。按 ${esc(yieldGrade)} / ${esc(batch)} 的 ${curve.points.length} 个点作区间内线性插值。可用收率 ${yieldFmt(first.y)}%～${yieldFmt(last.y)}%，对应针入度 ${yieldFmt(first.p)}～${yieldFmt(last.p)}。</p><p>${curve.points.map(o=>`${yieldFmt(o.y)}% → ${yieldFmt(o.p)} 针`).map(esc).join('；')}</p><label>选定切割收率（%）<input id="chosenYield" type="number" step="any" min="${first.y}" max="${last.y}" value="${esc(yieldFmt(chosen))}" oninput="rememberYieldInput(this);updateYieldChoice()"></label><div id="yieldChoice"></div><p class="muted">${curve.ignored?`已排除 ${curve.ignored} 条配料条件不符、条件未补充、其他牌号或掺蜡记录。`:''}请保持同批原料、相同针入度试验及取样条件；少量点仅提供局部估算，目标点仍需小样验证。收率＝沥青质量÷（母油质量＋调配油质量）×100%。本曲线只估算固定配比下的切割收率；配比改变后采用对应配方的实测曲线。</p></div>`;
   updateLocalYieldChoice();
 }
 function updateLocalYieldChoice(){

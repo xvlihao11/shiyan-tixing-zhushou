@@ -3,10 +3,11 @@ const fields=new Map(),set=(id,value)=>fields.set(id,{value:String(value)});
 let resultText='';const result={get innerHTML(){return resultText},set innerHTML(text){resultText=text;const m=text.match(/id="chosenYield"[^>]*value="([^"]*)"/);if(m)set('chosenYield',m[1])}};
 fields.set('yieldResult',result);fields.set('yieldChoice',{innerHTML:'',textContent:''});
 const observations=[{id:'a',type:'cut',grade:'G',batch:'NEW',yieldPct:40.83,pen:42},{id:'b',type:'cut',grade:'G',batch:'NEW',yieldPct:42.83,pen:70},{id:'old',type:'cut',grade:'G',batch:'OLD',yieldPct:62,pen:42},{id:'old2',type:'cut',grade:'G',batch:'OLD',yieldPct:66,pen:70},{id:'other',type:'cut',grade:'OTHER',batch:'NEW',yieldPct:90,pen:80},{id:'wax',type:'wax',grade:'G',batch:'NEW',initialYield:40,yieldChangePct:10,basePen:42,finalPen:70}];
+const withFormulation=o=>({...o,blendOil:'BLEND-A',motherPct:90,yieldBasis:'mixed-feed-total'});observations.forEach(o=>Object.assign(o,withFormulation(o)));
 const ctx={db:{yieldObservations:observations,yieldGrades:['G'],yieldDrafts:{}},KEY:'test',localStorage:{setItem(){}},get:id=>fields.get(id)||null,esc:x=>String(x??''),console};vm.createContext(ctx);
-for(const file of ['yield_local.js','yield.js'])vm.runInContext(fs.readFileSync(__dirname+'/app/assets/'+file,'utf8'),ctx);
+for(const file of ['yield_formulation.js','yield_local.js','yield.js'])vm.runInContext(fs.readFileSync(__dirname+'/app/assets/'+file,'utf8'),ctx);
 vm.runInContext("yieldGrade='G';yieldSelected=new Set(db.yieldObservations.map(o=>o.id));",ctx);
-for(const [id,value] of Object.entries({calcMode:'calibrated',calcBatch:'NEW',calcPen:42,calcYield:40.83,calcTarget:68,calcMass:100}))set(id,value);
+for(const [id,value] of Object.entries({calcMode:'calibrated',calcBatch:'NEW',calcBlendOil:'BLEND-A',calcMotherPct:90,calcPen:42,calcYield:40.83,calcTarget:68,calcMass:100}))set(id,value);
 const before=JSON.stringify(ctx.db.yieldObservations);
 let curve=ctx.yieldLocalCurve('G','NEW',42,40.83);assert.strictEqual(curve.points.length,2);assert.strictEqual(curve.ignored,4);
 const predicted=ctx.yieldLocalInterpolate(curve.points,'p',68,'y');assert(Math.abs(predicted-42.68714285714285)<1e-9);
@@ -17,13 +18,23 @@ set('calcTarget',75);ctx.calculateYield();assert(resultText.includes('超出本�
 set('calcBatch','UNKNOWN');ctx.calculateYield();assert(resultText.includes('至少需要两个'));assert(!resultText.includes('按原经验'));
 // Completely different feedstocks and nonlinear local slopes work without code changes.
 ctx.db.yieldObservations=[{id:'c',type:'cut',grade:'G',batch:'THIRD',yieldPct:55,pen:20},{id:'d',type:'cut',grade:'G',batch:'THIRD',yieldPct:57,pen:40},{id:'e',type:'cut',grade:'G',batch:'THIRD',yieldPct:61,pen:100}];
+ctx.db.yieldObservations=ctx.db.yieldObservations.map(withFormulation);
 vm.runInContext('yieldSelected=new Set(db.yieldObservations.map(o=>o.id))',ctx);
 curve=ctx.yieldLocalCurve('G','THIRD',20,55);assert.strictEqual(curve.points.length,3);assert.strictEqual(ctx.yieldLocalInterpolate(curve.points,'p',70,'y'),59);assert.strictEqual(ctx.yieldLocalInterpolate(curve.points,'p',30,'y'),56);
 assert.strictEqual(ctx.yieldLocalInterpolate(curve.points,'p',120,'y'),null);
-ctx.db.yieldObservations.push({id:'duplicate',type:'cut',grade:'G',batch:'THIRD',yieldPct:57,pen:45});vm.runInContext("yieldSelected.add('duplicate')",ctx);assert(ctx.yieldLocalCurve('G','THIRD',20,55).error.includes('同一收率'));
-ctx.db.yieldObservations=[{id:'bad',type:'cut',grade:'G',batch:'THIRD',yieldPct:57,pen:10}];vm.runInContext("yieldSelected=new Set(['bad'])",ctx);assert(ctx.yieldLocalCurve('G','THIRD',20,55).error.includes('趋势'));
+ctx.db.yieldObservations.push(withFormulation({id:'duplicate',type:'cut',grade:'G',batch:'THIRD',yieldPct:57,pen:45}));vm.runInContext("yieldSelected.add('duplicate')",ctx);assert(ctx.yieldLocalCurve('G','THIRD',20,55).error.includes('同一收率'));
+ctx.db.yieldObservations=[withFormulation({id:'bad',type:'cut',grade:'G',batch:'THIRD',yieldPct:57,pen:10})];vm.runInContext("yieldSelected=new Set(['bad'])",ctx);assert(ctx.yieldLocalCurve('G','THIRD',20,55).error.includes('趋势'));
 // The explicit historical model is retained, while the new mode never silently falls back to it.
 ctx.db.yieldObservations=JSON.parse(before);vm.runInContext('yieldSelected=new Set(db.yieldObservations.map(o=>o.id))',ctx);
 set('calcMode','experience');set('calcBatch','NEW');set('calcTarget',68);ctx.calculateYield();assert(resultText.includes('原经验公式'));assert(Math.abs(40.83+ctx.piecewiseYield(42,68)-43.49666666666666)<1e-9);
 assert.strictEqual(JSON.stringify(ctx.db.yieldObservations),before);
-console.log('Generic feedstock-specific multi-point curves, bidirectional interpolation, no cross-batch fallback and retained historical model passed');
+// The same mother oil with a different blend, proportion or yield basis is isolated.
+set('calcMode','calibrated');set('calcMotherPct','85');ctx.calculateYield();assert(resultText.includes('至少需要两个'));
+set('calcMotherPct','80');ctx.calculateYield();assert(resultText.includes('至少需要两个'));
+set('calcMotherPct','90.0');set('calcBlendOil','BLEND-B');ctx.calculateYield();assert(resultText.includes('至少需要两个'));
+set('calcBlendOil','BLEND-A');ctx.db.yieldObservations[1].yieldBasis='mother-oil-only';ctx.calculateYield();assert(resultText.includes('至少需要两个'));
+delete ctx.db.yieldObservations[1].yieldBasis;delete ctx.db.yieldObservations[1].blendOil;delete ctx.db.yieldObservations[1].motherPct;
+ctx.confirm=()=>true;ctx.save=()=>{};ctx.alert=()=>{};
+ctx.tagYieldObservation('b');assert.strictEqual(ctx.db.yieldObservations[1].pen,70);assert.strictEqual(ctx.db.yieldObservations[1].yieldPct,42.83);assert.strictEqual(ctx.db.yieldObservations[1].motherPct,90);assert(ctx.db.yieldObservations[1].formulationHistory.length);assert(resultText.includes('42.69%'));
+set('calcMotherPct','');ctx.calculateYield();assert(resultText.includes('填写调配油标识'));set('calcMotherPct','101');ctx.calculateYield();assert(resultText.includes('填写调配油标识'));
+console.log('Formulation-specific curves, total-feed yield basis, ratio/blend isolation and explicit legacy annotation passed');
