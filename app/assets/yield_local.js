@@ -21,17 +21,17 @@ function calculateLocalYield(){
   const batch=yieldText('calcBatch'),p=yieldNum('calcPen'),y=yieldNum('calcYield'),target=yieldNum('calcTarget');
   if(!batch||!yieldValid(p,.01,1000)||!yieldValid(y,.01,100))return yieldError('填写母油批次、有效初始针入度及初始收率。');
   const curve=yieldLocalCurve(yieldGrade,batch,p,y);if(curve.error)return yieldError(curve.error);
-  const first=curve.points[0],last=curve.points.at(-1),center=Number.isFinite(target)?yieldLocalInterpolate(curve.points,'p',target,'y'):null;
-  if(Number.isFinite(target)&&center===null)return yieldError(`目标针入度超出本批已测 ${yieldFmt(first.p)}～${yieldFmt(last.p)} 范围，请补测相邻收率点；本次不向范围外推算。`);
-  yieldSuggestedRange=[first.y,last.y];
+  const first=curve.points[0],last=curve.points.at(-1),estimate=Number.isFinite(target)?yieldCurveEstimate(curve.points,'p',target,'y'):null,center=estimate?.value??null;
+  if(estimate?.error)return yieldError(estimate.error);
+  yieldSuggestedRange=[.01,100];
   const prior=Number(yieldDraft.chosenYield),chosen=center??(yieldDraft.chosenYield!==''&&Number.isFinite(prior)&&prior>=first.y&&prior<=last.y?prior:y);
-  get('yieldResult').innerHTML=`<div class="yield-result"><p><strong>${center===null?'本批实测曲线':`目标 ${esc(yieldFmt(target))} 针 · 估算收率 ${esc(yieldFmt(center))}%`}</strong></p><p>${esc(yieldFormulationLabel(yieldFormulation()))}。按 ${esc(yieldGrade)} / ${esc(batch)} 的 ${curve.points.length} 个点作区间内线性插值。可用收率 ${yieldFmt(first.y)}%～${yieldFmt(last.y)}%，对应针入度 ${yieldFmt(first.p)}～${yieldFmt(last.p)}。</p><p>${curve.points.map(o=>`${yieldFmt(o.y)}% → ${yieldFmt(o.p)} 针`).map(esc).join('；')}</p><label>选定切割收率（%）<input id="chosenYield" type="number" step="any" min="${first.y}" max="${last.y}" value="${esc(yieldFmt(chosen))}" oninput="rememberYieldInput(this);updateYieldChoice()"></label><div id="yieldChoice"></div><p class="muted">${curve.ignored?`已排除 ${curve.ignored} 条配料条件不符、条件未补充、其他牌号或掺蜡记录。`:''}请保持同批原料、相同针入度试验及取样条件；少量点仅提供局部估算，目标点仍需小样验证。收率＝沥青质量÷（母油质量＋调配油质量）×100%。本曲线只估算固定配比下的切割收率；配比改变后采用对应配方的实测曲线。</p></div>`;
+  get('yieldResult').innerHTML=`<div class="yield-result"><p><strong>${center===null?'本批实测曲线':`目标 ${esc(yieldFmt(target))} 针 · 估算收率 ${esc(yieldFmt(center))}%`}</strong></p>${estimate?`<p class="${estimate.extrapolated?'yield-extrapolation-note':'muted'}">${esc(yieldEstimateNote(estimate,'p'))}</p>`:''}<p>${esc(yieldFormulationLabel(yieldFormulation()))}。按 ${esc(yieldGrade)} / ${esc(batch)} 的 ${curve.points.length} 个点建立曲线。已测收率 ${yieldFmt(first.y)}%～${yieldFmt(last.y)}%，对应针入度 ${yieldFmt(first.p)}～${yieldFmt(last.p)}。</p><p>${curve.points.map(o=>`${yieldFmt(o.y)}% → ${yieldFmt(o.p)} 针`).map(esc).join('；')}</p><label>选定切割收率（%）<input id="chosenYield" type="number" step="any" min="0.01" max="100" value="${esc(yieldFmt(chosen))}" oninput="rememberYieldInput(this);updateYieldChoice()"></label><div id="yieldChoice"></div><p class="muted">${curve.ignored?`已排除 ${curve.ignored} 条配料条件不符、条件未补充、其他牌号或掺蜡记录。`:''}请保持同批原料、相同针入度试验及取样条件；少量点仅提供局部估算，目标点仍需小样验证。收率＝沥青质量÷（母油质量＋调配油质量）×100%。本曲线只估算固定配比下的切割收率；配比改变后采用对应配方的实测曲线。</p></div>`;
   updateLocalYieldChoice();
 }
 function updateLocalYieldChoice(){
   const panel=get('yieldChoice');if(!panel)return;
   const curve=yieldLocalCurve(yieldGrade,yieldText('calcBatch'),yieldNum('calcPen'),yieldNum('calcYield'));
   if(curve.error){panel.textContent=curve.error;return}
-  const chosen=yieldNum('chosenYield'),prediction=yieldLocalInterpolate(curve.points,'y',chosen,'p');
-  panel.innerHTML=prediction===null?'<p class="muted">选定收率超出本批实测范围，请补测后再估算。</p>':`<p>本批插值针入度约 <strong>${yieldFmt(prediction)}</strong>（0.1 mm）。</p>`;
+  const chosen=yieldNum('chosenYield'),estimate=yieldCurveEstimate(curve.points,'y',chosen,'p');
+  panel.innerHTML=estimate.error?`<p class="muted">${esc(estimate.error)}</p>`:`<p>本批${estimate.extrapolated?'外推':'插值'}针入度约 <strong>${yieldFmt(estimate.value)}</strong>（0.1 mm）。</p><p class="${estimate.extrapolated?'yield-extrapolation-note':'muted'}">${esc(yieldEstimateNote(estimate,'y'))}</p>`;
 }

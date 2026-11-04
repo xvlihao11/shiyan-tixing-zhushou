@@ -1,6 +1,6 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 let serial=0,stored='';const messages=[],ctx={db:{templates:[],samples:[],runs:[],yieldObservations:[{id:'legacy',yieldPct:62,pen:60}]},KEY:'test',localStorage:{setItem:(k,v)=>stored=v},uid:()=> 'id'+(++serial),render(){},alert:m=>messages.push(m),confirm:()=>true,esc:x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),yieldValid:(n,min,max)=>Number.isFinite(n)&&n>=min&&n<=max,yieldFmt:n=>Number(n).toFixed(2).replace(/\.?0+$/,'')};
-vm.createContext(ctx);for(const file of ['yield_local.js','oil_evaluation.js'])vm.runInContext(fs.readFileSync(__dirname+'/app/assets/'+file,'utf8'),ctx);
+vm.createContext(ctx);for(const file of ['yield_extrapolation.js','yield_local.js','oil_evaluation.js'])vm.runInContext(fs.readFileSync(__dirname+'/app/assets/'+file,'utf8'),ctx);
 ctx.ensureOilEvaluationData();const before=JSON.stringify(ctx.db.yieldObservations),d=ctx.db.yieldOilDraft;
 d.newOilName='母油 A';d.newOilBatch='批次1';ctx.addEvaluationOil();const a=ctx.db.yieldOilLibrary[0].id;
 d.newOilName='调配油 B';d.newOilBatch='批次2';ctx.addEvaluationOil();const b=ctx.db.yieldOilLibrary[1].id;
@@ -18,6 +18,8 @@ assert.strictEqual(ctx.yieldLocalInterpolate(curve.points,'p',70,'y'),null);asse
 const pure=ctx.oilRecipe(a,'',100,'25℃/方案A');assert(pure);assert.strictEqual(ctx.oilMixtureReferences(pure).length,2);assert(Math.abs(ctx.yieldLocalInterpolate(ctx.oilMeasuredCurve(ctx.oilMixtureReferences(pure)).points,'p',68,'y')-42.687142857)<1e-8);
 Object.assign(d,{targetPen:'55'});ctx.openOilWorkspace('blend');let ui=ctx.oilWorkspaceUI();assert(ui.includes('母油 A'));assert(ui.includes('调配油 B'));assert(ui.includes('42%'));assert(ui.includes('原料 A 单油评价'));assert(ui.includes('原料 B 单油评价'));assert(ui.includes('混配实测'));assert(ui.includes('不直接按比例平均'));
 ctx.openOilWorkspace('library');ui=ctx.oilWorkspaceUI();assert(ui.includes('记录单油评价'));assert(ui.includes('40.83'));assert.strictEqual(JSON.stringify(ctx.db.yieldObservations),before);
+// Oil selection no longer launches native select/datalist popups over glass/video.
+assert(!ui.includes('<select'));ctx.openOilWorkspace('blend');ui=ctx.oilWorkspaceUI();assert(!ui.includes('<select'));assert(!ui.includes('<datalist'));assert(ui.includes('100∶0'));
 // Full backup validation and merge keep both single-oil and mixture data.
 const backup=fs.readFileSync(__dirname+'/app/assets/backup_full.js','utf8');vm.runInContext(backup.slice(backup.indexOf('function fullSafe('),backup.indexOf('function fullBytesToBase64(')),ctx);vm.runInContext(backup.match(/function fullMerge\([^\n]+/)[0],ctx);
 const restored=ctx.fullValidateDB(JSON.parse(stored));assert.strictEqual(restored.yieldOilLibrary.length,2);assert.strictEqual(restored.yieldOilEvaluations.length,4);assert.strictEqual(restored.yieldOilMixtures.length,2);
