@@ -598,19 +598,3 @@ body.has-wallpaper,.has-wallpaper .trial-wallpaper{background:#153d59}
 .bbr-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.bbr-pair label{min-width:0}.bbr-specimen{margin-top:10px}.bbr-pair input{font-variant-numeric:tabular-nums}
 
 .oil-data-scroll{overflow-x:auto;max-width:100%}.oil-data-table{border-collapse:collapse;width:100%;font-size:13px}.oil-data-table th,.oil-data-table td{padding:7px;text-align:left;border-bottom:1px solid #a3c9d044;white-space:nowrap}.oil-data-table button{font-size:12px;min-height:30px;padding:4px 7px}
-
-/* Stable opaque controls over video; oil pickers use an HTML sheet, not an OS popup. */
-.yield-form-active{color-scheme:light}
-.yield-form-active:not(.navigation-sliding) #root{transform:none;will-change:auto}
-.yield-form-active .yield-page .card::before{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;will-change:auto;transition:none;transform:none}
-.yield-form-active .yield-page .card::after{transition:none}
-.yield-form-active .yield-page :is(input,select,textarea,.oil-picker-control){color-scheme:light;background:#edf7fb!important;color:#154f6c!important;-webkit-text-fill-color:#154f6c;text-shadow:none!important;filter:none!important;box-shadow:none}
-.yield-form-active .yield-page option{background:#edf7fb;color:#154f6c}
-.yield-form-active .oil-data-table :is(th,td){text-shadow:none!important}
-.oil-picker-control{display:flex;align-items:center;justify-content:space-between;width:100%;margin:5px 0 11px;padding:11px 12px;border:1px solid #8eb4c4;border-radius:11px;font-size:16px;text-align:left}
-#oilPickerDialog .oil-picker-card{background:#f4fafc!important;color:#154f6c!important;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:0 8px 28px #08243866}
-#oilPickerDialog :is(strong,button){text-shadow:none!important;color:#154f6c!important;-webkit-text-fill-color:#154f6c}
-#oilPickerDialog .oil-picker-option{display:block;width:100%;margin:7px 0;padding:12px;background:#e7f2f8!important;border:1px solid #abc9d5;text-align:left;box-shadow:none}
-#oilPickerDialog .oil-picker-option.selected{background:#cce9f8!important;border-color:#397da4}
-.oil-ratio-presets{display:flex;flex-wrap:wrap;gap:6px}.oil-ratio-presets button{margin:0;min-height:34px;padding:6px 10px}
-.yield-page .yield-extrapolation-note{padding:9px 11px;border-left:3px solid #b77a15;background:rgba(255,243,206,.94);border-radius:6px;color:#704800!important;text-shadow:none!important}
