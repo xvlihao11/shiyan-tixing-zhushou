@@ -5,7 +5,7 @@ fields.set('yieldResult',result);fields.set('yieldChoice',{innerHTML:'',textCont
 const observations=[{id:'a',type:'cut',grade:'G',batch:'NEW',yieldPct:40.83,pen:42},{id:'b',type:'cut',grade:'G',batch:'NEW',yieldPct:42.83,pen:70},{id:'old',type:'cut',grade:'G',batch:'OLD',yieldPct:62,pen:42},{id:'old2',type:'cut',grade:'G',batch:'OLD',yieldPct:66,pen:70},{id:'other',type:'cut',grade:'OTHER',batch:'NEW',yieldPct:90,pen:80},{id:'wax',type:'wax',grade:'G',batch:'NEW',initialYield:40,yieldChangePct:10,basePen:42,finalPen:70}];
 const withFormulation=o=>({...o,blendOil:'BLEND-A',motherPct:90,yieldBasis:'mixed-feed-total'});observations.forEach(o=>Object.assign(o,withFormulation(o)));
 const ctx={db:{yieldObservations:observations,yieldGrades:['G'],yieldDrafts:{}},KEY:'test',localStorage:{setItem(){}},get:id=>fields.get(id)||null,esc:x=>String(x??''),console};vm.createContext(ctx);
-for(const file of ['yield_formulation.js','yield_local.js','yield.js'])vm.runInContext(fs.readFileSync(__dirname+'/app/assets/'+file,'utf8'),ctx);
+for(const file of ['yield_formulation.js','yield_extrapolation.js','yield_local.js','yield.js'])vm.runInContext(fs.readFileSync(__dirname+'/app/assets/'+file,'utf8'),ctx);
 vm.runInContext("yieldGrade='G';yieldSelected=new Set(db.yieldObservations.map(o=>o.id));",ctx);
 for(const [id,value] of Object.entries({calcMode:'calibrated',calcBatch:'NEW',calcBlendOil:'BLEND-A',calcMotherPct:90,calcPen:42,calcYield:40.83,calcTarget:68,calcMass:100}))set(id,value);
 const before=JSON.stringify(ctx.db.yieldObservations);
@@ -14,7 +14,7 @@ const predicted=ctx.yieldLocalInterpolate(curve.points,'p',68,'y');assert(Math.a
 assert(Math.abs(ctx.yieldLocalInterpolate(curve.points,'y',predicted,'p')-68)<1e-9);
 assert.strictEqual(ctx.yieldLocalInterpolate(curve.points,'p',42,'y'),40.83);assert.strictEqual(ctx.yieldLocalInterpolate(curve.points,'p',70,'y'),42.83);
 ctx.calculateYield();assert(resultText.includes('42.69%'));assert(!resultText.includes('预计加蜡油'));assert(!resultText.includes('43.5%'));assert(fields.get('yieldChoice').innerHTML.includes('68.04'));
-set('calcTarget',75);ctx.calculateYield();assert(resultText.includes('超出本批已测'));assert(!resultText.includes('建议收率'));
+set('calcTarget',75);ctx.calculateYield();assert(resultText.includes('外推估算'));assert(resultText.includes('43.19%'));assert(resultText.includes('最近两点'));
 set('calcBatch','UNKNOWN');ctx.calculateYield();assert(resultText.includes('至少需要两个'));assert(!resultText.includes('按原经验'));
 // Completely different feedstocks and nonlinear local slopes work without code changes.
 ctx.db.yieldObservations=[{id:'c',type:'cut',grade:'G',batch:'THIRD',yieldPct:55,pen:20},{id:'d',type:'cut',grade:'G',batch:'THIRD',yieldPct:57,pen:40},{id:'e',type:'cut',grade:'G',batch:'THIRD',yieldPct:61,pen:100}];
