@@ -70,12 +70,12 @@ function evaluateDerivedViscosity(run,ratio){
   if(rows.length!==1)return {state:'neutral',text:rows.length?'多个黏度比限值需核对':'无对应老化条件及温度的黏度比限值'};
   const row=rows[0],limit=parseInternalLimit(row.limit),unit=internalUnit(row.unit);
   const label=`内控 ${row.limit} ${row.unit}`;
-  if(!limit)return {state:'neutral',text:/^报告$|^实测$/.test(row.limit)?'仅记录实测，无限值判定':'条件性指标需人工核对',limit:label};
+  if(!limit)return {state:'neutral',text:/^报告$|^实测$/.test(row.limit)?'仅记录实测，无限值判定':'条件性指标需人工核对',method:row.method,limit:label};
   // A ratio is dimensionless. Some supplied profiles write it as %, others as —.
-  if(unit!=='%'&&unit!=='倍'&&unit!=='—'&&unit!=='-')return {state:'neutral',text:'黏度比单位需人工核对',limit:label};
+  if(unit!=='%'&&unit!=='倍'&&unit!=='—'&&unit!=='-')return {state:'neutral',text:'黏度比单位需人工核对',method:row.method,limit:label};
   const value=unit==='%'?ratio*100:ratio,eps=1e-9;
   const good=(limit.min===undefined||(limit.minInclusive?value>=limit.min-eps:value>limit.min))&&(limit.max===undefined||(limit.maxInclusive?value<=limit.max+eps:value<limit.max));
-  return {state:good?'pass':'fail',text:good?'合格':'不合格',value,unit:row.unit,limit:label};
+  return {state:good?'pass':'fail',text:good?'合格':'不合格',value,unit:row.unit,method:row.method,limit:label};
 }
 function internalMetricCandidates(run,profile){if(!profile)return [];return profile.rows.filter(row=>{if(/^原表注/.test(row.method)||/底线值|选罐要求/.test(row.item))return false;if(internalMetricKind(run.name)!==internalMetricKind(row.item)||internalPhase(row.item)!==internalRunPhase(run))return false;const temp=row.item.match(/(?:（|\()\s*([−-]?\d+(?:\.\d+)?)\s*℃/);if(temp&&(String(run.temp??'').trim()===''||Number(run.temp)!==Number(temp[1].replace('−','-'))))return false;return convertInternalValue(1,resultUnit(run),row.unit)!==null})}
 function autoInternalBinding(run){const sample=db.samples.find(s=>s.id===run.sampleId),profile=internalProfile(sample);if(!profile||run.internalMetricOverride)return;const signature=JSON.stringify([profile.id,profile.sourceVersion,run.name,run.phase||'原样',run.temp,run.unit]);const matches=internalMetricCandidates(run,profile);if(matches.length!==1){if(run.internalBinding?.autoMatched){run.internalBindingHistory=run.internalBindingHistory||[];run.internalBindingHistory.push({...run.internalBinding,replacedAt:Date.now()});delete run.internalBinding;localStorage.setItem(KEY,JSON.stringify(db))}return}const row=matches[0];if(run.internalBinding?.autoSignature===signature&&run.internalBinding.id===row.id)return;const previous=run.internalBinding;if(previous){run.internalBindingHistory=run.internalBindingHistory||[];run.internalBindingHistory.push({...previous,replacedAt:Date.now()})}run.internalBinding={...row,profileId:profile.id,profileName:profile.name,source:profile.source,sourceVersion:profile.sourceVersion,conditionConfirmed:false,boundAt:Date.now(),autoMatched:true,autoSignature:signature};localStorage.setItem(KEY,JSON.stringify(db))}

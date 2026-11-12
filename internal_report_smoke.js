@@ -14,6 +14,9 @@ ctx.db.runs=[{id:'pen',name:'针入度',phase:'原样',sampleId:'s',temp:'25',un
 const report=ctx.markdown('s');assert(report.includes('| 指标 | 指标范围 | 测试结果 | 测试方法 |'));
 assert(report.includes(`| 针入度 | ${metric.limit} ${metric.unit} | 62 ${metric.unit} | 本次实际方法 T 0604 |`),report);
 assert(!report.includes('未测软化点'));
+ctx.db.runs[0].standard='';assert(ctx.markdown('s').includes(`内控参考：${metric.method}`));
+ctx.db.runs[0].standard='ASTM D5';assert(ctx.markdown('s').includes(`实测：ASTM D5；内控参考：${metric.method}`));
 ctx.db.runs[0].temp='15';assert(ctx.markdown('s').includes('未匹配内控指标'));
+assert(!ctx.markdown('s').includes('内控参考：'));
 delete sample.internalProfileId;assert(ctx.markdown('s').includes('| 样品 | 实验项目 | 单位 | 结果 |'));
 console.log('Real internal-profile range, actual method, untested-row omission and normal report fallback passed');
