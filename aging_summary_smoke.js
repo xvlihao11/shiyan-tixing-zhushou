@@ -37,10 +37,10 @@ for(const label of ['黏度比','针入度比','软化点差','质量变化（�
 assert.strictEqual((summary.match(/card derived-results/g)||[]).length,1);
 const report=ctx.markdown('s');
 assert(!report.includes('### 老化前后计算结果'));
-const table=report.split('\n').filter(l=>l.startsWith('| 试样 |'));
+const table=report.split('\n').filter(l=>l.includes(' | 未匹配内控指标 | ')||l.includes(' | ≤300 % | '));
 assert.strictEqual(table.length,10);
 assert(table.slice(-4).every((line,i)=>line.includes(['黏度比','针入度比','软化点差','RTFOT 老化'][i])));
-assert.strictEqual((report.match(/\| % \| \+0\.069 \|/g)||[]).length,1);
+assert.strictEqual((report.match(/\| \+0\.069 % \|/g)||[]).length,1);
 assert(!ctx.markdown('s','p0').includes('针入度比'));
 assert(!ctx.derivedUI('s','v1').includes('质量变化（质量损失）'));
 assert.strictEqual(JSON.stringify(ctx.db),snapshot);

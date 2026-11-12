@@ -1,0 +1,19 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const assets=process.argv[2]||__dirname+'/app/assets';
+const read=n=>fs.readFileSync(assets+'/'+n,'utf8'),html=read('index.html');
+function part(a,b){const i=html.indexOf(a),j=html.indexOf(b,i);assert(i>=0&&j>i,a);return html.slice(i,j)}
+const sample={id:'s',name:'报告样品',date:'2026-11-12'};
+const ctx={db:{samples:[sample],runs:[]},exportSamplesFor:()=>[sample],isHeating:()=>false,isAgingMassLoss:()=>false,isSegregation:()=>false,isSoftening:()=>false,localDateKey:()=>sample.date};
+vm.createContext(ctx);
+for(const f of ['mscr.js','bbr.js','internal_standards.js'])vm.runInContext(read(f),ctx);
+vm.runInContext(part('function isRotationalViscosity(', 'const AGING_MASS_LABELS=')+part('const AGING_MASS_LABELS=', 'function groupUI(')+part('function resultQuantum(', 'function addTemplate(')+part('const md=x=>','function download('),ctx);
+const profile=vm.runInContext("INTERNAL_STANDARDS.find(p=>p.rows.some(r=>/针入度[（(]25℃/.test(r.item)&&internalPhase(r.item)==='原样'&&internalMetricKind(r.item)==='针入度'))",ctx);
+assert(profile);sample.internalProfileId=profile.id;
+const metric=profile.rows.find(r=>/针入度[（(]25℃/.test(r.item)&&ctx.internalPhase(r.item)==='原样'&&ctx.internalMetricKind(r.item)==='针入度');
+ctx.db.runs=[{id:'pen',name:'针入度',phase:'原样',sampleId:'s',temp:'25',unit:metric.unit,standard:'本次实际方法 T 0604',groups:[{name:sample.name,readings:['61','63']}]},{id:'empty',name:'未测软化点',sampleId:'s',groups:[{name:sample.name,readings:['','']}]}];
+const report=ctx.markdown('s');assert(report.includes('| 指标 | 指标范围 | 测试结果 | 测试方法 |'));
+assert(report.includes(`| 针入度 | ${metric.limit} ${metric.unit} | 62 ${metric.unit} | 本次实际方法 T 0604 |`),report);
+assert(!report.includes('未测软化点'));
+ctx.db.runs[0].temp='15';assert(ctx.markdown('s').includes('未匹配内控指标'));
+delete sample.internalProfileId;assert(ctx.markdown('s').includes('| 样品 | 实验项目 | 单位 | 结果 |'));
+console.log('Real internal-profile range, actual method, untested-row omission and normal report fallback passed');
