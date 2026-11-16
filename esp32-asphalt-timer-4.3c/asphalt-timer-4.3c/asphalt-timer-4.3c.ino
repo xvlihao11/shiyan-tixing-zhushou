@@ -129,6 +129,11 @@ bool sound_settings_ready = false, sound_save_pending = false;
 uint32_t last_input_ms = 0, last_draw_ms = 0;
 uint32_t last_reminder_check_ms = 0;
 int alert_run = -1, alert_step = -1;
+bool reminder_deferred = false;
+int pending_reminder_count = 0;
+bool stopwatch_protects_input() {
+  return stopwatch.running || page == Page::Stopwatch || page == Page::StopwatchRecords;
+}
 uint32_t alert_end_ms = 0, alarm_sound_end_ms = 0, next_beep_ms = 0;
 bool voice_sd_ready = false, voice_attempted = false, voice_playing = false, voice_failed = false;
 File voice_file;
@@ -562,7 +567,7 @@ void beep(int ms, int frequency = 880) {
 
 // Feed the short acknowledgement in small chunks, without beep()'s blocking drain.
 void record_feedback_tick(uint32_t tick) {
-  const bool wanted=((page==Page::Stopwatch&&!screen_locked&&!backlight_off)||(record_audio_test_until&&int32_t(tick-record_audio_test_until)<0))&&alert_run<0&&!voice_playing&&!voice_upload_active;
+  const bool wanted=((page==Page::Stopwatch&&!screen_locked&&!backlight_off)||(record_audio_test_until&&int32_t(tick-record_audio_test_until)<0))&&(alert_run<0||stopwatch_protects_input())&&!voice_playing&&!voice_upload_active;
   if(!wanted){
     record_tone_remaining=0;
     if(record_audio_open){record_audio_open=false;record_tone_remaining=0;esp_codec_dev_close(play_device);speaker_audio_poweramp_enable(false);}
@@ -1301,7 +1306,10 @@ void draw_stopwatch() {
   stopwatch_format(stopwatch.elapsed_us(esp_timer_get_time()),text,sizeof text);
   box(20,76,760,108,CARD);
   draw_stopwatch_digits(text);
-  centered(20,190,760,"时 : 分 : 秒 . 百分秒",MUTED);
+  if(pending_reminder_count) {
+    char pending[80];snprintf(pending,sizeof pending,"%d 项试验已到点 · 暂停并退出秒表后提醒",pending_reminder_count);
+    centered(20,190,760,pending,ORANGE);
+  } else centered(20,190,760,"时 : 分 : 秒 . 百分秒",MUTED);
   if(stopwatch.record_count){
     char interval[40],latest[96];stopwatch_format(stopwatch.interval_us(stopwatch.record_count-1),interval,sizeof interval);
     snprintf(latest,sizeof latest,"第 %lu 次记录 · 本段 %s",static_cast<unsigned long>(stopwatch.record_count),interval);
@@ -1361,7 +1369,7 @@ void draw_confirm() {
 }
 
 void draw_alarm() {
-  if (alert_run < 0) return;
+  if (alert_run < 0 || stopwatch_protects_input()) return;
   hit_count = 0;
   box(72, 64, 656, 350, RED);
   centered(96, 94, 608, "实验步骤已到点");
@@ -1932,7 +1940,7 @@ void handle_action(Action action, int arg) {
       selected_run = alert_run; start_or_finish(alert_step, true);
       alert_run = alert_step = -1; break;
     case Action::StopwatchOpen:
-      stopwatch_return=page;page=Page::Stopwatch;break;
+      voice_stop();voice_failed=false;stopwatch_return=page;page=Page::Stopwatch;break;
     case Action::StopwatchToggle:
       record_flash_until=0;
       if(stopwatch.running)stopwatch.pause(esp_timer_get_time());
@@ -2046,6 +2054,33 @@ void handle_swipe(int delta_y) {
 
 void check_reminders(uint32_t tick) {
   if (!clock_ok) return;
+  if (stopwatch_protects_input()) {
+    // Keep newly due steps unnotified so ordinary reminders deliver them later.
+    // No reminder persistence or alarm audio in the recording-critical path.
+    int pending = alert_run >= 0 ? 1 : 0;
+    const int64_t at = now_ms();
+    for(int i=0;i<lab.run_count;++i) {
+      const int j=current_index(lab.runs[i]);
+      if(j>=0 && !lab.runs[i].steps[j].notified && is_due(lab.runs[i].steps[j],at)) ++pending;
+    }
+    if(pending!=pending_reminder_count){pending_reminder_count=pending;redraw=true;}
+    if(alert_run>=0) reminder_deferred=true;
+    voice_stop();voice_failed=false;
+    return;
+  }
+  pending_reminder_count=0;
+  if(reminder_deferred) {
+    reminder_deferred=false;
+    if(alert_run>=0) {
+      alert_end_ms=tick+(lab.runs[alert_run].steps[alert_step].mode==RemindMode::Alarm?30000:8000);
+      alarm_sound_end_ms=tick+5000;next_beep_ms=tick;voice_attempted=false;
+      if(lab.runs[alert_run].steps[alert_step].mode==RemindMode::Notification) {
+        voice_attempted=true;
+        if(!voice_start(lab.runs[alert_run],lab.runs[alert_run].steps[alert_step]))alarm_melody();
+      }
+      redraw=true;
+    }
+  }
   if (alert_run >= 0) {
     if (static_cast<int32_t>(tick - alert_end_ms) >= 0) {
       voice_stop();
@@ -2466,7 +2501,7 @@ void loop() {
   last_touch_irq_count=irq_snapshot;
   touch_gt911_point_t point=touch_gt911_read_point(2);
   const uint64_t touch_at=esp_timer_get_time();
-  const bool record_enabled=quick_record&&alert_run<0&&confirm_kind==ConfirmKind::None;
+  const bool record_enabled=quick_record&&(alert_run<0||stopwatch_protects_input())&&confirm_kind==ConfirmKind::None;
   if(record_press.observe(point.fresh,point.cnt,point.cnt?point.x[0]:0,point.cnt?point.y[0]:0,record_enabled))stopwatch_primary_at(touch_at);
   // A poll without a new GT911 frame is neither a press nor a release.
   if(point.fresh) {

@@ -1,0 +1,15 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const source=fs.readFileSync(require('path').join(__dirname,'../asphalt-timer-4.3c/asphalt-timer-4.3c.ino'),'utf8');
+let body=source.slice(source.indexOf('void check_reminders(uint32_t tick) {'),source.indexOf('\nbool live_display_needed()'));
+body=body.replace('void check_reminders(uint32_t tick)','function check_reminders(tick)').replace(/static_cast<[^>]+>\(([^()]*)\)/g,'($1)').replace(/\b(?:const\s+)?(?:int64_t|uint32_t|int|Run&|Step&)\s+(\w+)/g,'let $1').replaceAll('RemindMode::','RemindMode.').replace(/unsigned\(([^()]*)\)/g,'($1)');
+const c={clock_ok:true,protected:true,alert_run:-1,alert_step:-1,pending_reminder_count:0,reminder_deferred:false,redraw:false,voice_failed:false,voice_playing:false,voice_attempted:false,alert_end_ms:0,alarm_sound_end_ms:0,next_beep_ms:0,brightness:80,RemindMode:{Alarm:2,Notification:1},saves:0,sounds:0,lab:{run_count:2,runs:[0,1].map(id=>({id,steps:[{notified:false,due:true,mode:2}]}))},Serial:{printf(){}},notice(){},apply_brightness(){},millis:()=>1000,now_ms:()=>1000,current_index:()=>0,is_due:s=>s.due};
+c.stopwatch_protects_input=()=>c.protected;c.voice_stop=()=>{c.voice_playing=false};c.lab_save=()=>{c.saves++;return true};c.voice_start=()=>{c.sounds++;return true};c.alarm_melody=()=>{c.sounds++};vm.createContext(c);vm.runInContext(body,c);
+c.check_reminders(1000);assert.equal(c.pending_reminder_count,2);assert.equal(c.saves,0);assert.equal(c.sounds,0);assert.equal(c.alert_run,-1);assert(!c.lab.runs[0].steps[0].notified);
+c.protected=false;c.check_reminders(1000);assert.equal(c.alert_run,0);assert.equal(c.saves,1);
+c.protected=true;c.voice_playing=true;c.check_reminders(2000);assert(c.reminder_deferred);assert(!c.voice_playing);assert.equal(c.pending_reminder_count,2);
+c.check_reminders(90000);assert.equal(c.alert_run,0);assert.equal(c.saves,1);assert.equal(c.sounds,0);
+c.protected=false;c.check_reminders(90000);assert.equal(c.alert_end_ms,120000);assert.equal(c.sounds,1);
+c.check_reminders(120001);assert.equal(c.alert_run,1);assert.equal(c.saves,2);
+assert(source.includes('if (alert_run < 0 || stopwatch_protects_input()) return;'));
+assert(source.includes('quick_record&&(alert_run<0||stopwatch_protects_input())&&confirm_kind'));
+console.log('PASS: deferred due reminders, no save/audio during recording, active reminder suspension/resumption, multiple pending delivery, popup and record gating. C++ reminder body adapted to JS with mocked hardware.');
